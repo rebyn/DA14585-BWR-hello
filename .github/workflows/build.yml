@@ -18,6 +18,7 @@ jobs:
           cc -Wall -Wextra -I firmware/bwr_hello/src
           firmware/bwr_hello/src/epd_bwr.c firmware/bwr_hello/src/gfx.c
           firmware/bwr_hello/src/board.c firmware/bwr_hello/src/ble_ota.c
+          firmware/bwr_hello/src/factory_reset.c
           host_test/stub_test.c -o /tmp/bwr_test && /tmp/bwr_test
       - name: check_bin self-test
         run: |

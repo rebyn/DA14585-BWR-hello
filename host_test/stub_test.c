@@ -13,6 +13,7 @@
 #include "gfx.h"
 #include "board.h"
 #include "ble_ota.h"
+#include "factory_reset.h"
 
 void epd_write_cmd(uint8_t c) { (void)c; }
 void epd_write_data(uint8_t v) { (void)v; }
@@ -49,5 +50,42 @@ int main(void) {
     assert(ota_magic_find(f, 16) == 2 && ota_magic_find(f, 8) == -1);
     assert(ota_crc((uint8_t *)"abc", 3) == 0x352441C2);
     printf("C-OK plane=%d black_bytes=%d\n", EPD_PLANE_SIZE, n);
+
+    /* ---- factory-reset contract (docs/FACTORY_RESET.md) ---- */
+    static uint8_t flash[0x40000];
+    memset(flash, 0xA5, sizeof flash);
+    // exempt sentinels: product header magic, board + panel records, banks
+    flash[0x38000] = 0x70; flash[0x38001] = 0x52;
+    flash[0x39000] = 0x09; flash[0x3A000] = 0x00;
+    const fr_span_t banks[] = { { 0x04000, 0x10000 }, { 0x1F000, 0x10000 } };
+    fr_span_t all_exempt[8];
+    memcpy(all_exempt, fr_exempt_fixed, sizeof fr_exempt_fixed);
+    memcpy(all_exempt + FR_NEXEMPT_FIXED, banks, sizeof banks);
+    int nex = FR_NEXEMPT_FIXED + 2;
+    // consequence 2, enforced: wipe list must not reach identity
+    assert(fr_disjoint(fr_covered_ref, FR_NCOVERED_REF, all_exempt, nex));
+    // a hostile table must trip the same check
+    assert(!fr_disjoint((const fr_span_t[]){{0x38FFF, 0x200}}, 1, all_exempt, nex));
+    // consequence 1, enforced by API shape: no auth token exists; a reset
+    // works with zero prior state. Magic-less / wrong-opcode packets: ignored.
+    uint8_t snap;
+    snap = flash[0x3B000];
+    assert(factory_reset_apply(flash, sizeof flash, fr_covered_ref, FR_NCOVERED_REF,
+                               (uint8_t[]){0x2F, 0, 0, 0, 0}, 5) == 0);
+    assert(factory_reset_apply(flash, sizeof flash, fr_covered_ref, FR_NCOVERED_REF,
+                               (uint8_t[]){0x30, 0x52, 0x53, 0x54, 0x5A}, 5) == 0);
+    assert(flash[0x3B000] == snap);
+    // real reset: covered wiped, exempt byte-identical
+    assert(factory_reset_apply(flash, sizeof flash, fr_covered_ref, FR_NCOVERED_REF,
+                               (uint8_t[]){0x2F, 0x52, 0x53, 0x54, 0x5A}, 5) == 1);
+    for (uint32_t i = 0; i < (uint32_t)FR_NCOVERED_REF; i++)
+        for (uint32_t k = 0; k < fr_covered_ref[i].len; k++)
+            assert(flash[fr_covered_ref[i].addr + k] == 0xFF);
+    assert(flash[0x38000] == 0x70 && flash[0x38001] == 0x52);
+    assert(flash[0x39000] == 0x09 && flash[0x3A000] == 0x00);
+    for (uint32_t i = 0; i < 2; i++)
+        for (uint32_t k = 0; k < banks[i].len; k++)
+            assert(flash[banks[i].addr + k] == 0xA5);
+    printf("C-OK factory-reset contract\n");
     return 0;
 }
