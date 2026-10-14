@@ -1,0 +1,60 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host:
+    name: host checks (gfx, ota header, check_bin)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: render hello + plane sizes
+        run: python3 host_test/render_hello.py
+      - name: C portable modules
+        run: >
+          cc -Wall -Wextra -I firmware/bwr_hello/src
+          firmware/bwr_hello/src/epd_bwr.c firmware/bwr_hello/src/gfx.c
+          firmware/bwr_hello/src/board.c firmware/bwr_hello/src/ble_ota.c
+          host_test/stub_test.c -o /tmp/bwr_test && /tmp/bwr_test
+      - name: check_bin self-test
+        run: |
+          python3 - <<'EOF'
+          import struct, subprocess
+          GOOD = struct.pack('<II', 0x07FD2780, 0x07FC0125) + bytes(100)
+          GOOD += bytes([0x79,0x13,0xA5,0xF9,0x86,0xEC,0x5A,0x06]) + struct.pack('<I', 9)
+          GOOD += bytes(1000)
+          open('/tmp/good.bin','wb').write(GOOD)
+          BAD = b'\x70\x51\xAA\x00' + bytes(2000)  # pre-wrapped header, no vectors
+          open('/tmp/bad.bin','wb').write(BAD)
+          assert subprocess.run(['python3','tools/check_bin.py','/tmp/good.bin']).returncode == 0
+          assert subprocess.run(['python3','tools/check_bin.py','/tmp/bad.bin']).returncode == 2
+          print("check_bin self-test OK")
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hello-display
+          path: |
+            host_test/hello_canvas.pbm
+            host_test/hello_panel.pbm
+            host_test/hello_image.bin
+
+  firmware-compile:
+    name: firmware compile sweep (ARM, no link yet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: install ARM toolchain
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc-arm-none-eabi python3
+      - name: unpack vendored SDK
+        run: |
+          mkdir -p ~/sdk && unzip -q ancestor/docs/SDK_6.0.22.1401.zip -d ~/sdk
+          ls ~/sdk/DA145xx_SDK/6.0.22.1401/sdk | head -n 3
+      - name: apply bring-up gate
+        run: patch -p1 --directory=ancestor < patches/bringup-no-selfflash.patch
+      - name: compile-only sweep (87 files)
+        run: python3 tools/ci_compile.py --sdk ~/sdk --ancestor ancestor
