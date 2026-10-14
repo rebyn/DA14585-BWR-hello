@@ -23,7 +23,11 @@ include $(BUILD)/sources.mk
 
 CFLAGS := -mcpu=cortex-m0 -mthumb -Os -std=gnu11 -ffunction-sections -fdata-sections \
   -D__DA14585__ -Wall $(INCLUDES) $(FORCE_INC)
-ASFLAGS := -mcpu=cortex-m0 -mthumb -D__DA14585__ $(INCLUDES) $(FORCE_INC) -x assembler-with-cpp
+ASFLAGS := -mcpu=cortex-m0 -mthumb -D__DA14585__ $(INCLUDES) -x assembler-with-cpp
+# NOTE: no $(FORCE_INC) here — those are C headers; feeding struct/enum
+# declarations to the assembler is exactly the user_config.h "junk at end
+# of line" failure. Keil assembles without its C MiscControls for the same
+# reason.
 LDCPP := -D__DA14585__ -I$(SRC_ANC)/src/config \
   -I$(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/common_project_files
 LDFLAGS := -mcpu=cortex-m0 -mthumb -nostartfiles \
