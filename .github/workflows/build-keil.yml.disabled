@@ -1,0 +1,86 @@
+# DISABLED (renamed to .disabled so Actions ignores it).
+# Keil/Windows alternative to the GCC firmware-link job. To use:
+#   1. Provision a Windows X64 machine with Keil MDK + Arm Compiler 6.24.
+#      NOTE: MDK-Community's 32KB code limit is BELOW our ~60KB image; a
+#      licensed MDK (or Essence/Pro) is required. This alone is why the GCC
+#      path is primary: no license, no Windows.
+#   2. Register it as a self-hosted runner with labels [self-hosted, Windows, X64].
+#   3. Rename this file to build-keil.yml and push.
+# Paths below are adapted to this repo (Keil project lives in ancestor/).
+
+name: Build HMCLOCK Firmware (Keil, self-hosted Windows)
+
+on:
+  workflow_dispatch:  # manual only; GCC path stays the automatic one
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Locate Keil tools
+        run: |
+          $uv4 = "$env:LOCALAPPDATA\Keil_v5\UV4\UV4.exe"
+          if (!(Test-Path $uv4)) {
+            throw "Keil UV4.exe not found: $uv4"
+          }
+
+          $fromelf = "$env:LOCALAPPDATA\Keil_v5\ARM\ARMCompiler6.24\bin\fromelf.exe"
+          if (!(Test-Path $fromelf)) {
+            throw "Arm Compiler 6.24 fromelf.exe not found: $fromelf"
+          }
+
+          "UV4=$uv4" >> $env:GITHUB_ENV
+          "FROMELF=$fromelf" >> $env:GITHUB_ENV
+
+      - name: Full firmware rebuild
+        working-directory: ancestor/Keil_5
+        run: |
+          & $env:UV4 -r ble_app_peripheral.uvprojx `
+            -j0 -t DA14585 -o build.log
+
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content build.log -Tail 100
+            throw "Keil build failed"
+          }
+
+          Get-Content build.log -Tail 100
+
+          if ((Get-Content build.log -Raw) -notmatch
+              '0 Error\(s\),\s*0 Warning\(s\)') {
+            throw "Build log does not show 0 errors and 0 warnings"
+          }
+
+      - name: Verify firmware output
+        run: |
+          $bin = "ancestor/Keil_5/out_DA14585/Objects/ble_app_peripheral_585.bin"
+
+          if (!(Test-Path $bin)) {
+            throw "Firmware BIN not found: $bin"
+          }
+
+          Get-Item $bin | Format-List FullName, Length
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hmclock-firmware-keil
+          path: |
+            ancestor/Keil_5/out_DA14585/Objects/ble_app_peripheral_585.bin
+            ancestor/Keil_5/out_DA14585/Objects/ble_app_peripheral_585.axf
+            ancestor/Keil_5/out_DA14585/Objects/ble_app_peripheral_585.hex
+            ancestor/Keil_5/build.log
+          if-no-files-found: error
+          retention-days: 14

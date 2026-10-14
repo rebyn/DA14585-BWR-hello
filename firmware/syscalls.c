@@ -26,19 +26,5 @@ int _kill(pid_t pid, int sig) {
 pid_t _getpid(void) { return 1; }
 void _exit(int status) { (void)status; for (;;) { } }
 void abort(void) { for (;;) { } }
-int _write(int fd, const char *buf, int n) {
-    (void)fd; (void)buf; (void)n;
-    errno = EBADF;
-    return -1;
-}
-int _read(int fd, char *buf, int n) {
-    (void)fd; (void)buf; (void)n;
-    errno = EBADF;
-    return -1;
-}
-int _close(int fd) { (void)fd; errno = EBADF; return -1; }
-int _lseek(int fd, int off, int whence) {
-    (void)fd; (void)off; (void)whence;
-    errno = EBADF;
-    return -1;
-}
+/* NOTE: _write/_read/_close/_lseek already exist in arch_main.c (SDK) —
+ * do not redefine them here (multiple-definition at link). */
