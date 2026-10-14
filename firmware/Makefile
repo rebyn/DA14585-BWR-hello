@@ -40,7 +40,7 @@ LDFLAGS := -mcpu=cortex-m0 -mthumb \
 # shims with no GCC sources); GNU ld usually accepts ARMCC Cortex-M0 objects.
 LIBS := -l:da14585_586.lib -lc -lgcc
 
-SOURCES := $(C_SRCS) $(S_SRCS)
+SOURCES := $(C_SRCS) $(S_SRCS) $(THISDIR)/syscalls.c
 OBJS := $(foreach s,$(SOURCES),$(BUILD)/obj/$(subst /,_,$(s)).o)
 
 all: $(BUILD)/bwr_hello.bin
