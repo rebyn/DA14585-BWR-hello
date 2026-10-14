@@ -34,6 +34,13 @@ int main(void) {
     for (int i = 0; i < EPD_PLANE_SIZE; i++) if (epd_black[i] != 0xFF) n++;
     assert(n > 0);
     for (int i = 0; i < EPD_PLANE_SIZE; i++) assert(epd_red[i] == 0xFF);
+    static uint8_t wire[EPD_WIRE_PLANE_SIZE];
+    int w = 0;
+    epd_pack_wire(epd_black, wire);
+    for (int i = 0; i < EPD_WIRE_PLANE_SIZE; i++) if (wire[i] != 0x00) w++;
+    assert(w > 0);   // rotation preserves ink (white=1 -> wire has set bits)
+    epd_pack_wire(epd_red, wire);
+    for (int i = 0; i < EPD_WIRE_PLANE_SIZE; i++) assert(wire[i] == 0xFF);
     assert(gfx_glyph('H') && !gfx_glyph('Z'));
     uint8_t h[64];
     ota_header(h, 1000, 0x12345678, 1);

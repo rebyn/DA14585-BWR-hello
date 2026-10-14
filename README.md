@@ -1,7 +1,7 @@
 # DA14585-BWR-hello
 
 Minimal "Hello world" firmware for the 2.13" tri-color (B/W/R) tag
-`DIY-2_13C-xxxx` (E0213A192, 250x122), side-by-side with HEMA (`../DA14585-ESL-213`).
+`DIY-2_13C-xxxx` (212×104, measured on-device), side-by-side with HEMA (`../DA14585-ESL-213`).
 
 HEMA is the B/W reference (SSD1680, DSL, web UI). This repo is the BWR
 starting point: boot, init the tri-color panel, paint "Hello world", stay
@@ -25,8 +25,9 @@ host_test/render_hello.py  host mirror of gfx: renders hello.pbm, checks sizes
 * Two RAM planes: black `0x24`, red `0x26`. White = both 1. Full update:
   `0x22 0xF7` + `0x20`, wait BUSY low. HEMA B/W uses one plane; do not reuse
   its driver verbatim.
-* Geometry 250x122 -> black plane 250*122/8 = 3813 B (rounded up per row:
-  32 B/row * 122 = 3904 B on the wire). Same for red.
+* Geometry 212×104 logical (landscape) = 104×212 on the wire: 13 B/row ×
+  212 rows = 2756 B per plane, black + red. `epd_display()` rotates at push
+  time (`epd_pack_wire`), same mapping the vendor webtool applies.
 * Waveform: use panel OTP (slow, safe) first. Hand-written LUT comes later
   after measuring the lot (see HEMA `tag_types.h` for why).
 

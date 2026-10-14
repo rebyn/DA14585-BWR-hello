@@ -40,7 +40,8 @@ relative to it. Vendor protocol = our RE of `DIY-2_13C` (`ble_ota.h` here).
 ## D. Panel — port required (the actual work)
 
 - HMCLOCK defaults 104×212, B/W only, red plane never driven (`src/epd/epd.c:423`).
-- Our panel: 120×252 wire order (its `250×122` logical, cf. A22 row in Readme).
+- Our panel: 212×104 logical = 104×212 wire order (measured on-device;
+  HMCLOCK's A22 `250×122` row does not apply).
   `detect_w/h` from `0x3A000`, override via `0x97` — reuse, verify against OUR
   tag's dump before driving (P1_1 contention trap: read flash, never probe).
 - Red plane: add second plane buffer + `0x26` writes + BWR init

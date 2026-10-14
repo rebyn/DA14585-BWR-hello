@@ -73,7 +73,7 @@ int gfx_text_width(const char *s, uint8_t scale) {
 
 void gfx_hello(void) {
     const char *msg = "Hello world!";
-    uint8_t scale = 4;
+    uint8_t scale = 2;   // (12*6-1)*2 = 142px fits the 212px canvas
     gfx_clear(1);
     int w = gfx_text_width(msg, scale);
     int x = (EPD_W - w) / 2;

@@ -21,6 +21,8 @@ def main():
     ap.add_argument('--sdk', required=True)
     ap.add_argument('--ancestor', required=True)
     ap.add_argument('--cc', default='arm-none-eabi-gcc')
+    ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--extra-include', action='append', default=[])
     a = ap.parse_args()
     sdk = a.sdk
     if os.path.basename(sdk.rstrip('/')) != '6.0.22.1401':
@@ -34,10 +36,13 @@ def main():
             for p in e.text.split(';'):
                 q = conv(p, anc, keil, sdk)
                 if q not in incs: incs.append(q)
+    for p in a.extra_include:
+        if p not in incs: incs.append(p)
     files = []
     for f in t.getroot().iter('File'):
         n, p = f.findtext('FileName'), f.findtext('FilePath')
-        if n and n.endswith('.c') and p:
+        iib = f.findtext('FileOption/CommonProperty/IncludeInBuild')
+        if n and n.endswith('.c') and p and iib != '0':
             files.append((n, conv(p, anc, keil, sdk)))
     print(f"sources={len(files)} includes={len(incs)} cc={a.cc}", flush=True)
     missing = [(n, q) for n, q in files if not os.path.isfile(q)]
@@ -45,11 +50,19 @@ def main():
         print(f"MISSING SOURCES: {len(missing)}")
         for n, q in missing[:10]: print(f"  {n} -> {q}")
         return 2
+    # Keil MiscControls: force-include the config chain into every TU.
+    force = ['-include', 'da14585_config_basic.h',
+             '-include', 'da14585_config_advanced.h',
+             '-include', 'user_config.h']
     I = [x for p in incs for x in ('-I', p)]
+    if a.dry_run:
+        print("CMD:", a.cc, '-mcpu=cortex-m0 -mthumb -std=gnu11 -fsyntax-only',
+              *force, f"[{len(I)//2} -I dirs]", "<file.c>")
+        return 0
     ok, fails = 0, []
     for n, q in files:
         r = subprocess.run([a.cc, '-mcpu=cortex-m0', '-mthumb', '-std=gnu11',
-                            '-fsyntax-only', '-w'] + I + [q],
+                            '-fsyntax-only', '-w'] + force + I + [q],
                            capture_output=True, text=True, timeout=180)
         if r.returncode == 0:
             ok += 1
