@@ -30,9 +30,15 @@ ASFLAGS := -mcpu=cortex-m0 -mthumb -D__DA14585__ $(INCLUDES) -x assembler-with-c
 # reason.
 LDCPP := -D__DA14585__ -I$(SRC_ANC)/src/config \
   -I$(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/common_project_files
-LDFLAGS := -mcpu=cortex-m0 -mthumb -nostartfiles \
+LDFLAGS := -mcpu=cortex-m0 -mthumb \
   -T $(BUILD)/ldscript.ld -L $(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/common_project_files/misc \
+  -L $(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/platform/system_library/output/Keil_5 \
   -Wl,--gc-sections -Wl,-Map=$(BUILD)/bwr_hello.map
+# NOTE: no -nostartfiles: newlib crt0 supplies _start (called by the SDK GCC
+# Reset_Handler) and main() lives in arch_main.c. The Keil ARMCC archive
+# da14585_586.lib provides PATCHED_*, patch_data1, arch_asm_* (ROM-patch
+# shims with no GCC sources); GNU ld usually accepts ARMCC Cortex-M0 objects.
+LIBS := -l:da14585_586.lib -lc -lgcc
 
 SOURCES := $(C_SRCS) $(S_SRCS)
 OBJS := $(foreach s,$(SOURCES),$(BUILD)/obj/$(subst /,_,$(s)).o)
@@ -60,7 +66,7 @@ endef
 $(foreach s,$(SOURCES),$(eval $(call COMPILE_rule,$(s))))
 
 $(BUILD)/bwr_hello.elf: $(OBJS) $(BUILD)/ldscript.ld
-	$(CC) $(LDFLAGS) $(OBJS) -o $@ -lc -lgcc
+	$(CC) $(LDFLAGS) $(OBJS) $(LIBS) -o $@
 
 $(BUILD)/bwr_hello.bin: $(BUILD)/bwr_hello.elf
 	$(OBJCOPY) -O binary $< $@
