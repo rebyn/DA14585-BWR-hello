@@ -63,6 +63,23 @@ relative to it. Vendor protocol = our RE of `DIY-2_13C` (`ble_ota.h` here).
 4. Red plane → faces → cutover. Vendor bank kept as fallback until step 3 is
    boring (several clean OTA cycles).
 
+## G. Three traps found reading `ota_handle`/`selflash` (Oct 15)
+
+1. **First boot eats the fallback.** `selflash_install()` (`spi_flash.c`)
+   runs on any OTP-chain boot whose slot 0 differs (magic/size/version) and
+   overwrites slot 0 with the running image. On our tag slot 0 = the vendor
+   bank. So the first boot of an unmodified HMCLOCK build destroys the vendor
+   fallback — the dump from step 1 is the only way back. For bring-up, strip
+   or gate `selflash_install` until panel/BLE are proven.
+2. **OTA ecosystem switches.** After cutover the device speaks `0xFF00` +
+   HMCLOCK opcodes; only the HMCLOCK web app can update it. Vendor webtool
+   can *deliver* the first image (payload-agnostic transport + magic trailer,
+   see C.3) but can never talk to the result. Plan the hand-off, don't drift
+   into it.
+3. **u16 size ceiling.** HMCLOCK sender + receiver use u16 size (web app
+   refuses >65535). Vendor bins are already ~64.7K. Widen both sides to u32
+   (vendor dialect) before the BWR image grows past it.
+
 ## License note
 
 Fork changes MIT (Terence Ang); original HMCLOCK states no license — credit
