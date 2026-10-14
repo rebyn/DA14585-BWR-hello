@@ -9,7 +9,8 @@ BUILD ?= $(THISDIR)/../out
 SDK_DIR ?= $(HOME)/sdk
 ANC_DIR ?= $(THISDIR)/../ancestor
 BRINGUP ?= 1
-CC ?= arm-none-eabi-gcc
+# NOTE: plain `CC ?=` loses to make's built-in default (cc); keep env override.
+CC := $(if $(filter default,$(origin CC)),arm-none-eabi-gcc,$(CC))
 OBJCOPY ?= arm-none-eabi-objcopy
 
 SRC_ANC := $(ANC_DIR)
