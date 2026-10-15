@@ -64,10 +64,11 @@ $(BUILD)/sources.mk: $(THISDIR)/../tools/gen_sources.py $(ANC_DEP)
 	@mkdir -p $(BUILD)
 	python3 $< --sdk $(SDK_DIR) --ancestor $(SRC_ANC) --out $@
 
-$(BUILD)/ancestor-src: $(THISDIR)/../patches/bringup-no-selfflash.patch $(THISDIR)/../patches/bringup-1conn-heaps.patch
+$(BUILD)/ancestor-src: $(THISDIR)/../patches/bringup-no-selfflash.patch $(THISDIR)/../patches/bringup-1conn-heaps.patch $(THISDIR)/../patches/bringup-vendor-name.patch
 	@mkdir -p $(BUILD) && rm -rf $@ && cp -r $(ANC_DIR) $@ && rm -rf $@/.git
 	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-no-selfflash.patch
-	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-1conn-heaps.patch && touch $@
+	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-1conn-heaps.patch
+	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-vendor-name.patch && touch $@
 
 $(BUILD)/ldscript.ld:
 	@mkdir -p $(BUILD)

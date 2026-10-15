@@ -1,0 +1,51 @@
+Advertise as DIY-2_13C-XXYYZZ instead of DCLK-XXYYZZ.
+
+The vendor webtool's 2.13C picker scans with namePrefix 'DIY-2_13C-' and
+routes by prefix to the 2_13c family, which explicitly supports the old
+HMCLOCK/FF00 protocol this firmware implements (js/family_hm.js, all traffic
+over 0xFF01 Long Value). A DCLK- name matches neither the picker filter nor
+any routing rule, so the device is invisible to the webtool after the first
+flash.
+
+Keeping the vendor name means every booting image stays reachable: forward
+updates and restore (vendor .bin back) both go through the same webtool over
+the same FF00 channel. Applied to the build copy only.
+
+Caveat: a non-booting image is still unrecoverable without SWD. The name only
+rescues images that boot far enough to advertise.
+
+--- a/src/user_peripheral.c
++++ b/src/user_peripheral.c
+@@ -56,7 +56,7 @@
+ static int otp_btaddr[2];                      // Bluetooth address read from OTP
+ static int otp_boot;                           // Boot-related data read from OTP
+ static char adv_name[20];                      // Advertised name buffer
+-char *bt_id = adv_name+7;                      // Start of the Bluetooth ID within the advertised name (right after "DCLK-")
++char *bt_id = adv_name+11;                     // Start of the Bluetooth ID within the advertised name (right after "DIY-2_13C-")
+ int clock_interval;                            // Clock update interval (seconds)
+ int clock_fixup_value;                         // Clock drift correction value
+ int clock_fixup_count;                         // Clock drift correction counter
+@@ -151,10 +151,10 @@
+ 	ba0 &= 0x00ffffff;
+ 	ba0 ^= ba1;
+ 
+-	// Build the advertised name (format: DCLK-XXYYZZ, where XXYYZZ are the last
++	// Build the advertised name (format: DIY-2_13C-XXYYZZ, where XXYYZZ are the last
+ 	// three bytes of the Bluetooth address)
+ 	u8 *ba = (u8*)&ba0;
+-	sprintf(adv_name+2, "DCLK-%02x%02x%02x", ba[2], ba[1], ba[0]);
++	sprintf(adv_name+2, "DIY-2_13C-%02x%02x%02x", ba[2], ba[1], ba[0]);
+ 	int name_len = strlen(adv_name+2);
+ 
+ 	// If the device name hasn't been set, use the generated name
+--- a/src/user_custs1_impl.c
++++ b/src/user_custs1_impl.c
+@@ -583,7 +583,7 @@
+ 		// Bluetooth icon, shown while advertising or connected -- mirrors clock_draw()
+ 		draw_bt(xres-17, qcy-43);
+ 	}
+-	sprintf(tbuf, "DCLK-%s", bt_id);
++	sprintf(tbuf, "DIY-2_13C-%s", bt_id);
+ 	draw_text_centered(col_cx, qcy-28, tbuf, BLACK);
+ 
+ 	// Solid divider on the optical center: midpoint of the neighboring text bands
