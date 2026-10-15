@@ -1530,14 +1530,17 @@
     // Inline spans: `code`, **bold**, [t](u)->t; other markup chars stripped
     function mdSpans(s) {
       const out = [];
+      // Collapse every whitespace run to at most one space first: the panel
+      // is too small for alignment spacing and wrapped lines re-space anyway.
       s.split('`').forEach((sg, i) => {
-        if (i % 2 === 1) { if (sg) out.push({ t: sg, b: false, c: true }); return; }
+        if (i % 2 === 1) { if (sg) out.push({ t: sg.replace(/ +/g, ' '), b: false, c: true }); return; }
         sg = sg.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
         sg.split(/\*\*(.+?)\*\*/g).forEach((p, j) => {
           if (!p) return;
           const bold = j % 2 === 1;
           if (!bold) p = p.replace(/[*_~]+/g, '');
-          if (p) out.push({ t: p, b: bold, c: false });
+          p = p.replace(/ +/g, ' ');
+          if (p && p.trim()) out.push({ t: p, b: bold, c: false });
         });
       });
       return out;
@@ -1572,9 +1575,12 @@
       try { localStorage.setItem('hmclock-mdtext', src); } catch (e) { /* not persisted */ }
       const size = (panelW > 0) ? { w: panelW, h: panelH } : defaultPanel();
       const w = size.w, h = size.h;
-      const fscale = { S: 0.85, M: 1, L: 1.2 }[document.getElementById('md-font').value] || 1;
+      const fscale = { S: 0.68, M: 0.8, L: 0.96 }[document.getElementById('md-font').value] || 0.8;
       const body = Math.max(9, Math.min(18, Math.round(h * 0.115 * fscale)));
-      const margin = body, maxW = w - margin * 2, lh = Math.round(body * 1.25);
+      // No page padding: full-bleed sides; vertical start fits one ascent and
+      // the bottom keeps one descender so diacritics never clip.
+      const margin = 0, topPad = body, botPad = Math.round(body * 0.25);
+      const maxW = w - margin * 2, lh = Math.round(body * 1.15);
       mdRuns = [];
       const emitPara = (text, o) => {
         o = o || {};
@@ -1583,7 +1589,7 @@
           if (o.mono) words.forEach(wd => { wd.font = mdFont(px, false, true); });
           mdRuns.push({
             spans: words, x: margin + (li === 0 ? indent : hanging),
-            h: Math.round(px * 1.25) + (li === 0 ? (o.padTop || 0) : 0),
+            h: Math.round(px * 1.15) + (li === 0 ? (o.padTop || 0) : 0),
             keepNext: !!o.keepNext && li === 0, bar: !!o.bar && li === 0
           });
         });
@@ -1597,7 +1603,7 @@
         let m;
         if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
           const mult = [0, 1.7, 1.45, 1.25, 1, 1, 1][m[1].length] || 1;
-          emitPara(m[2], { px: Math.round(body * mult), indent: 0, keepNext: true, padTop: Math.round(body * 0.3), padAfter: Math.round(body * 0.15), head: true });
+          emitPara(m[2], { px: Math.round(body * mult), indent: 0, keepNext: true, head: true });
         } else if ((m = line.match(/^\s*([-+*])\s+(.*)$/))) {
           emitPara('\u2022 ' + m[2], { px: body, indent: body, hanging: body * 2, padAfter: 0 });
         } else if ((m = line.match(/^\s*(\d+)[.)]\s+(.*)$/))) {
@@ -1609,20 +1615,20 @@
         } else if (/^\|.*\|\s*$/.test(line)) {
           emitPara(line.replace(/^\||\|$/g, '').split('|').map(c => c.trim()).join('  '), { px: body, indent: body, mono: true });
         } else if (!line.trim()) {
-          mdRuns.push({ gap: Math.round(body * 0.5) });
+          mdRuns.push({ gap: Math.round(body * 0.2) });
         } else {
-          emitPara(line, { px: body, padAfter: Math.round(body * 0.25) });
+          emitPara(line, { px: body });
         }
       });
       // Paginate: greedy fill, keep headings with the next line
-      const avail = h - margin * 2;
+      const avail = h - topPad - botPad;
       mdPages = [];
       let cur = [], used = 0;
       mdRuns.forEach((r, i) => {
         const rh = r.gap != null ? r.gap : r.h;
         if (r.keepNext && cur.length && used + rh > avail) { mdPages.push(cur); cur = []; used = 0; }
         if (used + rh > avail && cur.length) { mdPages.push(cur); cur = []; used = 0; }
-        if (r.gap == null) { r.y = margin + used; used += rh; cur.push(i); }
+        if (r.gap == null) { r.y = topPad + used; used += rh; cur.push(i); }
         else used += rh;
       });
       if (cur.length) mdPages.push(cur);
@@ -1653,8 +1659,11 @@
       const px = ctx.getImageData(0, 0, w, h).data;
       const stride = (w + 7) >> 3;
       const bits = new Uint8Array(stride * h);
+      // Panel convention is 1 = white (same as the photo pipeline): bright
+      // sets the bit. Cutoff 200 (not 128) so anti-aliased glyph edges go
+      // solid black instead of dropping out at small sizes.
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        if (px[(y * w + x) * 4] < 128) bits[y * stride + (x >> 3)] |= 0x80 >> (x & 7);
+        if (px[(y * w + x) * 4] >= 200) bits[y * stride + (x >> 3)] |= 0x80 >> (x & 7);
       }
       imageBits = bits; imageW = w; imageH = h; imageSent = false;
       mdActive = true;
