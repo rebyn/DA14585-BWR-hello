@@ -1117,10 +1117,12 @@ void user_svc1_rest_att_info_req_handler(ke_msg_id_t const msgid,
 /****************************************************************************************/
 // Demo attract loop (bring-up builds only).
 //
-// Boot paints frame 0 immediately and each minute tick advances one frame
-// (same content as host_test/seed_demo.json, ASCII only: the panel fonts have
-// no Vietnamese glyphs), so the panel re-renders step by step with no phone
-// attached. The header clock is live (hour/minute globals).
+// Boot paints frame 0 immediately and each minute tick advances one frame:
+// 6 nav frames (same content as host_test/seed_demo.json, ASCII only: the
+// panel fonts have no Vietnamese glyphs) plus a 7th on-panel diagnostics
+// frame (running build, slot headers, product slot map), so the panel
+// re-renders step by step with no phone attached. The header clock is live
+// (hour/minute globals).
 //
 // Rules: the loop starts on every boot (even with a stored image); after that
 // an OTA in progress or uploaded-image mode win (no paint, no advance).
@@ -1159,7 +1161,60 @@ static const char *demo_line2[6] = {
 	"LOOP",
 };
 
-int demo_nframes(void) { return 6; }
+int demo_nframes(void) { return 7; }
+
+// Frame 6: on-panel diagnostics -- running build, both slot headers and the
+// product-header slot map, as text. Answers the version/slot questions with
+// no BLE reads. Flash reads happen before epd_hw_open() takes the SPI bus.
+static void demo_slot_line(const uint8_t *h, int addr, int idx, char *out)
+{
+	if(h[0]==0x70 && h[1]==0x51 && h[2]==0xaa)
+		sprintf(out, "S%d %05X F%02X V%04X", idx, ((unsigned)addr)&0xFFFFF,
+			h[3], (h[28] | (h[29]<<8)) & 0xFFFF);
+	else
+		sprintf(out, "S%d %05X NO HDR", idx, ((unsigned)addr)&0xFFFFF);
+}
+
+static void demo_diag(int xres, int yres, int cx)
+{
+	uint8_t ph[16], h0[64], h1[64];
+	int a0, a1;
+	char head[16], l0[24], l1[24], l2[24], l3[24];
+
+	fspi_init();
+	sf_read(0x38000, 16, ph);
+	if(ph[0]==0x70 && ph[1]==0x52){
+		a0 = ph[4] | (ph[5]<<8) | (ph[6]<<16) | (ph[7]<<24);
+		a1 = ph[8] | (ph[9]<<8) | (ph[10]<<16) | (ph[11]<<24);
+	}else{
+		a0 = 0x4000; a1 = 0x1F000;
+	}
+	sf_read(a0, 64, h0);
+	sf_read(a1, 64, h1);
+	fspi_exit();
+
+	sprintf(head, "%02d:%02d", hour, minute);
+	sprintf(l0, "RUN %08X", EPD_VERSION);
+	demo_slot_line(h0, a0, 0, l1);
+	demo_slot_line(h1, a1, 1, l2);
+	sprintf(l3, "PRD %05X %05X", ((unsigned)a0)&0xFFFFF, ((unsigned)a1)&0xFFFFF);
+
+	fb_clear();
+	draw_text(4, 2, head, BLACK);
+	{
+		int w = text_width("DIAG 7/7");
+		draw_text(xres-4-w, 2, "DIAG 7/7", BLACK);
+	}
+	draw_hline(yres*20/104, 0, xres-1, BLACK);
+	draw_text_centered(cx, yres*28/104, l0, BLACK);
+	draw_text_centered(cx, yres*44/104, l1, BLACK);
+	draw_text_centered(cx, yres*60/104, l2, BLACK);
+	draw_text_centered(cx, yres*76/104, l3, BLACK);
+
+	epd_hw_open();
+	epd_update_mode(UPDATE_FULL);
+	epd_commit();
+}
 
 // Returns 1 if painted, 0 if skipped (OTA in progress or panel still busy
 // with the previous update -- the next tick retries, so a stuck BUSY stalls
@@ -1177,8 +1232,14 @@ int demo_draw(int step)
 	if(ota_state) return 0;
 	if(epd_busy()) return 0;
 
+	/* Last frame: on-panel diagnostics instead of nav content. */
+	if(step == 6){
+		demo_diag(xres, yres, cx);
+		return 1;
+	}
+
 	sprintf(head, "%02d:%02d", hour, minute);
-	sprintf(tag, "NAV %d/6", step+1);
+	sprintf(tag, "NAV %d/7", step+1);
 
 	fb_clear();
 
@@ -1203,8 +1264,8 @@ int demo_draw(int step)
 	return 1;
 }
 
-// Manual demo stepping (BLE command 0x98 page 2): each write advances one
-// nav frame, independent of the minute-tick attract loop. A press landing
+// Manual demo stepping (webtool Test button, bare 0x98): each write advances
+// one frame, independent of the minute-tick attract loop. A press landing
 // mid-update is a no-op (busy guard) rather than a re-init.
 void demo_preview(void)
 {

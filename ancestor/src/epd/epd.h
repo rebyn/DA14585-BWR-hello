@@ -21,6 +21,7 @@ int gpio_get(int index);
 #define ERASE_32K  0x52
 int fspi_config(u32 gpio_word);
 int fspi_init(void);
+int fspi_exit(void);
 int sf_readid(void);
 int sf_sector_erase(int cmd, int addr, int wait);
 int sf_page_write(int addr, u8 *buf, int size);
