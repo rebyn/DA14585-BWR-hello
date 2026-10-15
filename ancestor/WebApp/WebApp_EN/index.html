@@ -293,6 +293,31 @@
               <span id="opt-threshold-val" class="w-8 tabular-nums">128</span>
             </label>
           </div>
+          <!-- Markdown document to panel pages (no webtool-protocol change: pages reuse the image upload) -->
+          <div class="border-t border-gray-200 dark:border-slate-700 pt-3 space-y-2">
+            <div class="flex flex-wrap gap-3 items-center">
+              <label class="bg-slate-600 text-white px-4 py-2.5 rounded-lg btn-hover font-medium cursor-pointer">
+                <i class="fa fa-clipboard"></i> Choose .md
+                <input id="md-file" type="file" accept=".md,.markdown,.txt,text/plain" class="sr-only">
+              </label>
+              <button id="md-render-button" class="bg-slate-600 text-white px-4 py-2.5 rounded-lg btn-hover font-medium">
+                <i class="fa fa-refresh"></i> Render
+              </button>
+              <div id="md-pager" style="display:none" class="items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+                <button id="md-prev" class="px-3 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 font-medium">&lsaquo; Prev</button>
+                <span id="md-page-label" class="tabular-nums">Page 1/1</span>
+                <button id="md-next" class="px-3 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 font-medium">Next &rsaquo;</button>
+                <label class="flex items-center gap-2">Size
+                  <select id="md-font" class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5">
+                    <option value="S">S</option>
+                    <option value="M" selected>M</option>
+                    <option value="L">L</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <textarea id="md-text" rows="3" placeholder="...or paste markdown here, then Render. Pages render on this phone; turning pages sends each one to the clock when connected." class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-mono"></textarea>
+          </div>
           <div id="image-progress-container" class="hidden h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
             <div id="image-progress-bar" class="h-full bg-gradient-to-r from-primary to-accent w-0 transition-all duration-300"></div>
           </div>
@@ -389,6 +414,7 @@
     let deviceMode = null;   // null while disconnected
     let imageSent = false;   // the current bitmap is the one on the clock
     let uploadCancelled = false;
+    let uploading = false;     // an image upload is in flight (manual or md auto-send)
 
     // Derive the device's current time from deviceTimeBase and elapsed seconds (used by the card view)
     function deviceCurrentTime() {
@@ -1284,6 +1310,7 @@
       if (panelW) {
         try { localStorage.setItem('hmclock-panel', JSON.stringify({ w: panelW, h: panelH })); } catch (e) { /* not persisted */ }
       }
+      if (mdActive && mdText) { layoutMd(false); return; }
       if (!imageBits || (imageW == panelW && imageH == panelH)) return;
       if (sourceImg && panelW) {
         convertImage(sourceImg, panelW, panelH);
@@ -1442,6 +1469,8 @@
       const img = new Image();
       img.onload = () => {
         sourceImg = img;
+        mdActive = false;
+        document.getElementById('md-pager').style.display = 'none';
         const size = defaultPanel();
         convertImage(img, panelW || size.w, panelH || size.h);
         setImageStatus(connected ? 'Converted to ' + imageW + 'x' + imageH + ' black & white. Click Upload Image to send it.' : 'Converted to ' + imageW + 'x' + imageH + ' black & white. Connect to the clock to upload it (it is re-fitted if the panel is a different size).');
@@ -1475,9 +1504,188 @@
       sourceImg = null;
       imageW = imageH = 0;
       imageSent = false;
+      mdActive = false; mdText = ''; mdPages = []; mdPage = 0;
+      document.getElementById('md-pager').style.display = 'none';
+      document.getElementById('md-text').value = '';
+      try { localStorage.removeItem('hmclock-mdtext'); } catch (e) { /* nothing stored */ }
       setImageStatus('Cleared. Choose, drag in, or paste a picture.');
       updateUploadEnabled();
       renderPreview();
+    }
+
+    // ---- Markdown document to panel pages ----
+    // No webtool-protocol change: each page rasterizes to the panel-size
+    // canvas and flows through the existing image upload (0x94/95/96).
+    // Rendering is canvas fillText only (no innerHTML), so pasted markdown
+    // can never inject markup into this page.
+    let mdText = '';
+    let mdRuns = [];     // laid-out runs {spans:[{t,font}], x, y, h} or {rule,x,y,w}
+    let mdPages = [];    // arrays of run indices
+    let mdPage = 0;
+    let mdActive = false;
+    const mdMC = document.createElement('canvas').getContext('2d');
+    const mdFont = (px, bold, code) => (bold ? 'bold ' : '') + px + 'px ' +
+      (code ? 'ui-monospace, Menlo, Consolas, monospace' : '-apple-system, system-ui, sans-serif');
+
+    // Inline spans: `code`, **bold**, [t](u)->t; other markup chars stripped
+    function mdSpans(s) {
+      const out = [];
+      s.split('`').forEach((sg, i) => {
+        if (i % 2 === 1) { if (sg) out.push({ t: sg, b: false, c: true }); return; }
+        sg = sg.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+        sg.split(/\*\*(.+?)\*\*/g).forEach((p, j) => {
+          if (!p) return;
+          const bold = j % 2 === 1;
+          if (!bold) p = p.replace(/[*_~]+/g, '');
+          if (p) out.push({ t: p, b: bold, c: false });
+        });
+      });
+      return out;
+    }
+
+    function mdMeasure(t, font) { mdMC.font = font; return mdMC.measureText(t).width; }
+
+    // Greedy word wrap preserving per-word fonts; returns physical lines
+    function mdWrapLines(spans, px, maxW, x0, hanging) {
+      const words = [];
+      spans.forEach(sp => {
+        const font = mdFont(px, sp.b, sp.c);
+        sp.t.split(/\s+/).filter(Boolean).forEach(w => words.push({ t: w, font }));
+      });
+      const lines = [];
+      let cur = [], cw = 0, lim = maxW - x0;
+      const spaceW = (f) => mdMeasure(' ', f);
+      words.forEach(w => {
+        const ww = mdMeasure(w.t, w.font);
+        const need = cur.length ? spaceW(cur[cur.length - 1].font) + ww : ww;
+        if (cur.length && cw + need > lim) { lines.push(cur); cur = []; cw = 0; lim = maxW - hanging; }
+        if (cur.length) cw += spaceW(cur[cur.length - 1].font);
+        cur.push(w); cw += ww;
+      });
+      if (cur.length) lines.push(cur);
+      return lines.length ? lines : [[]];
+    }
+
+    function layoutMd(autoSend) {
+      const src = document.getElementById('md-text').value || '';
+      mdText = src;
+      try { localStorage.setItem('hmclock-mdtext', src); } catch (e) { /* not persisted */ }
+      const size = (panelW > 0) ? { w: panelW, h: panelH } : defaultPanel();
+      const w = size.w, h = size.h;
+      const fscale = { S: 0.85, M: 1, L: 1.2 }[document.getElementById('md-font').value] || 1;
+      const body = Math.max(9, Math.min(18, Math.round(h * 0.115 * fscale)));
+      const margin = body, maxW = w - margin * 2, lh = Math.round(body * 1.25);
+      mdRuns = [];
+      const emitPara = (text, o) => {
+        o = o || {};
+        const px = o.px || body, indent = o.indent || 0, hanging = o.hanging != null ? o.hanging : indent;
+        mdWrapLines(mdSpans(text), px, maxW, margin + indent, margin + hanging).forEach((words, li) => {
+          if (o.mono) words.forEach(wd => { wd.font = mdFont(px, false, true); });
+          mdRuns.push({
+            spans: words, x: margin + (li === 0 ? indent : hanging),
+            h: Math.round(px * 1.25) + (li === 0 ? (o.padTop || 0) : 0),
+            keepNext: !!o.keepNext && li === 0, bar: !!o.bar && li === 0
+          });
+        });
+        if (o.padAfter) mdRuns.push({ gap: o.padAfter });
+      };
+      let inCode = false;
+      src.split('\n').forEach(raw => {
+        const line = raw.replace(/\s+$/, '');
+        if (/^```/.test(line)) { inCode = !inCode; return; }
+        if (inCode) { emitPara(line || ' ', { px: body, indent: body, mono: true }); return; }
+        let m;
+        if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+          const mult = [0, 1.7, 1.45, 1.25, 1, 1, 1][m[1].length] || 1;
+          emitPara(m[2], { px: Math.round(body * mult), indent: 0, keepNext: true, padTop: Math.round(body * 0.3), padAfter: Math.round(body * 0.15), head: true });
+        } else if ((m = line.match(/^\s*([-+*])\s+(.*)$/))) {
+          emitPara('\u2022 ' + m[2], { px: body, indent: body, hanging: body * 2, padAfter: 0 });
+        } else if ((m = line.match(/^\s*(\d+)[.)]\s+(.*)$/))) {
+          emitPara(m[1] + '. ' + m[2], { px: body, indent: body, hanging: body * 2, padAfter: 0 });
+        } else if ((m = line.match(/^\s*>\s?(.*)$/))) {
+          emitPara(m[1], { px: body, indent: body, hanging: body, bar: true, padAfter: 0 });
+        } else if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+          mdRuns.push({ rule: true, x: margin, w: maxW, h: Math.round(body * 0.9) });
+        } else if (/^\|.*\|\s*$/.test(line)) {
+          emitPara(line.replace(/^\||\|$/g, '').split('|').map(c => c.trim()).join('  '), { px: body, indent: body, mono: true });
+        } else if (!line.trim()) {
+          mdRuns.push({ gap: Math.round(body * 0.5) });
+        } else {
+          emitPara(line, { px: body, padAfter: Math.round(body * 0.25) });
+        }
+      });
+      // Paginate: greedy fill, keep headings with the next line
+      const avail = h - margin * 2;
+      mdPages = [];
+      let cur = [], used = 0;
+      mdRuns.forEach((r, i) => {
+        const rh = r.gap != null ? r.gap : r.h;
+        if (r.keepNext && cur.length && used + rh > avail) { mdPages.push(cur); cur = []; used = 0; }
+        if (used + rh > avail && cur.length) { mdPages.push(cur); cur = []; used = 0; }
+        if (r.gap == null) { r.y = margin + used; used += rh; cur.push(i); }
+        else used += rh;
+      });
+      if (cur.length) mdPages.push(cur);
+      if (!mdPages.length) mdPages = [[]];
+      mdPage = Math.max(0, Math.min(mdPage, mdPages.length - 1));
+      renderMdPage(autoSend);
+    }
+
+    function renderMdPage(autoSend) {
+      const size = (panelW > 0) ? { w: panelW, h: panelH } : defaultPanel();
+      const w = size.w, h = size.h;
+      const cv = document.getElementById('image-preview');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#000';
+      (mdPages[mdPage] || []).forEach(ri => {
+        const r = mdRuns[ri];
+        if (r.rule) { ctx.fillRect(r.x, r.y, r.w, 2); return; }
+        let x = r.x;
+        if (r.bar) ctx.fillRect(r.x - 6, r.y - r.h + 3, 2, r.h);
+        r.spans.forEach(sp => {
+          ctx.font = sp.font;
+          ctx.fillText(sp.t, x, r.y);
+          x += ctx.measureText(sp.t).width + ctx.measureText(' ').width;
+        });
+      });
+      const px = ctx.getImageData(0, 0, w, h).data;
+      const stride = (w + 7) >> 3;
+      const bits = new Uint8Array(stride * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (px[(y * w + x) * 4] < 128) bits[y * stride + (x >> 3)] |= 0x80 >> (x & 7);
+      }
+      imageBits = bits; imageW = w; imageH = h; imageSent = false;
+      mdActive = true;
+      drawBits(bits, w, h);
+      updateUploadEnabled();
+      renderPreview();
+      const pager = document.getElementById('md-pager');
+      pager.style.display = 'flex';
+      document.getElementById('md-page-label').textContent = 'Page ' + (mdPage + 1) + '/' + mdPages.length;
+      document.getElementById('md-prev').disabled = mdPage <= 0;
+      document.getElementById('md-next').disabled = mdPage >= mdPages.length - 1;
+      setImageStatus('Markdown page ' + (mdPage + 1) + '/' + mdPages.length +
+        (connected ? ' - sent automatically when shown.' : ' - connect and press Upload Image to send it.'));
+      if (autoSend && connected && !uploading) onImageUpload();
+    }
+
+    function mdTurn(d) {
+      if (!mdPages.length) return;
+      mdPage = Math.max(0, Math.min(mdPages.length - 1, mdPage + d));
+      renderMdPage(true);
+    }
+
+    function onMdFile(event) {
+      const f = event.target.files[0];
+      event.target.value = '';
+      if (!f) return;
+      f.text().then(t => {
+        document.getElementById('md-text').value = t;
+        mdPage = 0;
+        layoutMd(true);
+      }).catch(() => setImageStatus('Could not read that file as text.', 'error'));
     }
 
     async function onImageUpload() {
@@ -1485,6 +1693,8 @@
         setImageStatus('Choose an image first.', 'error');
         return;
       }
+      if (uploading) return;
+      uploading = true;
       const button = document.getElementById('image-upload-button');
       const progressContainer = document.getElementById('image-progress-container');
       const progressBar = document.getElementById('image-progress-bar');
@@ -1539,6 +1749,7 @@
           imageResult('Upload failed: ' + (error.message || error), 'error');
         }
       } finally {
+        uploading = false;
         progressContainer.classList.add('hidden');
         cancelButton.classList.add('hidden');
         updateUploadEnabled();
@@ -1558,6 +1769,15 @@
     document.getElementById('mode-clock-button').addEventListener('click', () => onModeClick(0));
     document.getElementById('mode-image-button').addEventListener('click', () => onModeClick(1));
     document.getElementById('image-file').addEventListener('change', onImageChosen);
+    document.getElementById('md-file').addEventListener('change', onMdFile);
+    document.getElementById('md-render-button').addEventListener('click', () => { mdPage = 0; layoutMd(true); });
+    document.getElementById('md-prev').addEventListener('click', () => mdTurn(-1));
+    document.getElementById('md-next').addEventListener('click', () => mdTurn(1));
+    document.getElementById('md-font').addEventListener('change', () => layoutMd(false));
+    try {
+      const t = localStorage.getItem('hmclock-mdtext');
+      if (t) { document.getElementById('md-text').value = t; layoutMd(false); }
+    } catch (e) { /* no saved markdown */ }
     document.getElementById('image-upload-button').addEventListener('click', onImageUpload);
     document.getElementById('image-cancel-button').addEventListener('click', () => { uploadCancelled = true; });
     document.getElementById('image-clear-button').addEventListener('click', clearImage);
