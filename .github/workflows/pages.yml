@@ -1,0 +1,44 @@
+name: pages
+
+# Publishes our tweaked web app (markdown-to-panel pages) to GitHub Pages.
+# One-time setup: Settings -> Pages -> Source: GitHub Actions
+# (or run: gh api repos/{owner}/{repo}/pages -X POST -f build_type=workflow).
+# Afterwards every push touching the app redeploys it; open the pages URL
+# in a WebBLE-capable iPhone browser (Bluefy, not stock Safari/Chrome).
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'ancestor/WebApp/WebApp_EN/index.html'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: stage site
+        run: |
+          mkdir -p site
+          cp ancestor/WebApp/WebApp_EN/index.html site/index.html
+      - name: upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
