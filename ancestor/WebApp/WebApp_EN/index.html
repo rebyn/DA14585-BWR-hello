@@ -314,6 +314,14 @@
                     <option value="L">L</option>
                   </select>
                 </label>
+                <label class="flex items-center gap-2">Face
+                  <select id="md-face" class="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5">
+                    <option value="sys" selected>System</option>
+                    <option value="serif">Serif</option>
+                    <option value="round">Round</option>
+                    <option value="mono">Mono</option>
+                  </select>
+                </label>
               </div>
             </div>
             <textarea id="md-text" rows="3" placeholder="...or paste markdown here, then Render. Pages render on this phone; turning pages sends each one to the clock when connected." class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm font-mono"></textarea>
@@ -1508,6 +1516,9 @@
       document.getElementById('md-pager').style.display = 'none';
       document.getElementById('md-text').value = '';
       try { localStorage.removeItem('hmclock-mdtext'); } catch (e) { /* nothing stored */ }
+      try { localStorage.removeItem('hmclock-mdpage'); } catch (e) { /* nothing stored */ }
+      try { localStorage.removeItem('hmclock-mdfont'); } catch (e) { /* nothing stored */ }
+      try { localStorage.removeItem('hmclock-mdface'); } catch (e) { /* nothing stored */ }
       setImageStatus('Cleared. Choose, drag in, or paste a picture.');
       updateUploadEnabled();
       renderPreview();
@@ -1524,8 +1535,21 @@
     let mdPage = 0;
     let mdActive = false;
     const mdMC = document.createElement('canvas').getContext('2d');
-    const mdFont = (px, bold, code) => (bold ? 'bold ' : '') + px + 'px ' +
-      (code ? 'ui-monospace, Menlo, Consolas, monospace' : '-apple-system, system-ui, sans-serif');
+    // Semibold base everywhere: thresholding to 1bpp thins every stem, so
+    // regular-weight text comes out anemic at panel sizes; 600 renders
+    // roughly like 400 after the cut. Bold spans go to 800.
+    // Any font the browser provides works: the device receives only 1bpp
+    // pixels (0x94/95/96 carry no text), so rasterization is 100% local.
+    // All four stacks below are guaranteed on iOS (system/New York/Rounded/
+    // Menlo); webfonts would also work but need a load + document.fonts wait.
+    const mdFamily = (code) => {
+      const f = document.getElementById('md-face').value;
+      if (code || f === 'mono') return 'ui-monospace, Menlo, Consolas, monospace';
+      if (f === 'serif') return 'ui-serif, NewYork, Georgia, serif';
+      if (f === 'round') return 'ui-rounded, -apple-system, system-ui, sans-serif';
+      return '-apple-system, system-ui, sans-serif';
+    };
+    const mdFont = (px, bold, code) => (bold ? '800 ' : '600 ') + px + 'px ' + mdFamily(code);
 
     // Inline spans: `code`, **bold**, [t](u)->t; other markup chars stripped
     function mdSpans(s) {
@@ -1675,6 +1699,11 @@
       document.getElementById('md-page-label').textContent = 'Page ' + (mdPage + 1) + '/' + mdPages.length;
       document.getElementById('md-prev').disabled = mdPage <= 0;
       document.getElementById('md-next').disabled = mdPage >= mdPages.length - 1;
+      try {
+        localStorage.setItem('hmclock-mdpage', String(mdPage));
+        localStorage.setItem('hmclock-mdfont', document.getElementById('md-font').value);
+        localStorage.setItem('hmclock-mdface', document.getElementById('md-face').value);
+      } catch (e) { /* progress just won't persist */ }
       setImageStatus('Markdown page ' + (mdPage + 1) + '/' + mdPages.length +
         (connected ? ' - sent automatically when shown.' : ' - connect and press Upload Image to send it.'));
       if (autoSend && connected && !uploading) onImageUpload();
@@ -1783,9 +1812,19 @@
     document.getElementById('md-prev').addEventListener('click', () => mdTurn(-1));
     document.getElementById('md-next').addEventListener('click', () => mdTurn(1));
     document.getElementById('md-font').addEventListener('change', () => layoutMd(false));
+    document.getElementById('md-face').addEventListener('change', () => layoutMd(false));
     try {
       const t = localStorage.getItem('hmclock-mdtext');
-      if (t) { document.getElementById('md-text').value = t; layoutMd(false); }
+      if (t) {
+        document.getElementById('md-text').value = t;
+        const f = localStorage.getItem('hmclock-mdfont');
+        if (f) document.getElementById('md-font').value = f;
+        const fc = localStorage.getItem('hmclock-mdface');
+        if (fc) document.getElementById('md-face').value = fc;
+        const pg = parseInt(localStorage.getItem('hmclock-mdpage') || '0', 10);
+        if (pg > 0) mdPage = pg;
+        layoutMd(false);
+      }
     } catch (e) { /* no saved markdown */ }
     document.getElementById('image-upload-button').addEventListener('click', onImageUpload);
     document.getElementById('image-cancel-button').addEventListener('click', () => { uploadCancelled = true; });
