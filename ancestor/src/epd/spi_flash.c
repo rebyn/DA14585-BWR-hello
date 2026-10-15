@@ -525,6 +525,16 @@ int selflash(int otp_boot)
 	}
 	sf_read(0x00000, 16, (u8*)flash_diag+4);
 
+	// [20..22] always describe the RUNNING image. EPD_VERSION is baked into
+	// this binary, so the report can't disagree with what's executing --
+	// unlike slot headers (stale vendor bank, half-written updates) or boot
+	// paths that never read them: on the OTP-chain path below, the suppressed
+	// selflash_install() was the only writer, so with the bring-up gate on
+	// these bytes stayed zero and every build reported "v0".
+	flash_diag[20] = EPD_VERSION & 0xff;
+	flash_diag[21] = (EPD_VERSION>>8) & 0xff;
+	flash_diag[22] = (EPD_VERSION>>16) & 0xff;
+
 	sf_read(0x39000, 16, pbuf);
 	printk("39000: ");
 	for(int i=0; i<16; i++){
