@@ -1,7 +1,7 @@
 # DA14585-BWR-hello
 
 Minimal "Hello world" firmware for the 2.13" tri-color (B/W/R) tag
-`DIY-2_13C-xxxx` (212×104, measured on-device), side-by-side with HEMA (`../DA14585-ESL-213`).
+`DCLK-xxxx` (212×104, measured on-device), side-by-side with HEMA (`../DA14585-ESL-213`).
 
 HEMA is the B/W reference (SSD1680, DSL, web UI). This repo is the BWR
 starting point: boot, init the tri-color panel, paint "Hello world", stay
@@ -34,7 +34,7 @@ host_test/render_hello.py  host mirror of gfx: renders hello.pbm, checks sizes
 ## BLE / OTA compat (so the existing webtool flashes it)
 
 * Service `62750001-d828-918d-fb46-b6c11c675aec`, write+notify `...0002`,
-  version `...0003`, name `DIY-2_13C-xxxx`. See `ble_ota.h`.
+  version `...0003`, name `DCLK-xxxx`. See `ble_ota.h`.
 * File magic `79 13 A5 F9 86 EC 5A 06 + u32LE firmVer` — webtool refuses files
   without it. `mkota.py` stamps it.
 * On-air: `A0 + u32LE(size)` -> 256B pages as `A2+128 / A3+128` (first page

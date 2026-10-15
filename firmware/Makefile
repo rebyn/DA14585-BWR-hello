@@ -25,6 +25,9 @@ CFLAGS := -mcpu=cortex-m0 -mthumb -Os -std=gnu11 -ffunction-sections -fdata-sect
   -flto -D__DA14585__ -Wall $(INCLUDES) $(FORCE_INC)
 ifeq ($(BRINGUP),1)
   CFLAGS += -DBRINGUP_NO_SELFFLASH
+  # Demo attract loop (patches/demo-attract.patch): boot cycles nav frames.
+  # Production builds drop this (and the QR screen returns).
+  CFLAGS += -DDEMO_ATTRACT
 endif
 ASFLAGS := -mcpu=cortex-m0 -mthumb -D__DA14585__ $(INCLUDES) -x assembler-with-cpp
 # NOTE: no $(FORCE_INC) here — those are C headers; feeding struct/enum
@@ -64,10 +67,11 @@ $(BUILD)/sources.mk: $(THISDIR)/../tools/gen_sources.py $(ANC_DEP)
 	@mkdir -p $(BUILD)
 	python3 $< --sdk $(SDK_DIR) --ancestor $(SRC_ANC) --out $@
 
-$(BUILD)/ancestor-src: $(THISDIR)/../patches/bringup-no-selfflash.patch $(THISDIR)/../patches/bringup-1conn-heaps.patch
+$(BUILD)/ancestor-src: $(THISDIR)/../patches/bringup-no-selfflash.patch $(THISDIR)/../patches/bringup-1conn-heaps.patch $(THISDIR)/../patches/demo-attract.patch
 	@mkdir -p $(BUILD) && rm -rf $@ && cp -r $(ANC_DIR) $@ && rm -rf $@/.git
 	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-no-selfflash.patch
-	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-1conn-heaps.patch && touch $@
+	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-1conn-heaps.patch
+	patch -p1 --directory=$@ < $(THISDIR)/../patches/demo-attract.patch && touch $@
 
 $(BUILD)/ldscript.ld:
 	@mkdir -p $(BUILD)

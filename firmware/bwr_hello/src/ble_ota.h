@@ -3,7 +3,7 @@
 // Vendor EPD-family BLE surface (kept so the existing webtool flashes us):
 //   svc  62750001-d828-918d-fb46-b6c11c675aec
 //   char 62750002-... write+notify (commands + OTA), 62750003-... 1B version.
-// Name: DIY-2_13C-xxxx (BLE name filter in js/connector.js).
+// Name: DCLK-xxxx (stock HMCLOCK convention; vendor webtool path dropped).
 // OTA opcodes on ...0002 (write-with-response, 136B writes):
 //   A0 + u32LE(firmSize)              erase inactive bank
 //   A2 + 135B / A3 + 135B             256B page halves (first page: 64B hdr + 192B fw)

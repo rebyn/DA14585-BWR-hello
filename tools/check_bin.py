@@ -52,8 +52,8 @@ def check(path):
     # 8. vendor-service strings (behavioral: warn only, needs HW to prove)
     svc_le = bytes([0xAE, 0x6C, 0x11, 0xB6, 0x46, 0xFB, 0x8D, 0x91,
                     0x28, 0xD8, 0x01, 0x00, 0x75, 0x62])
-    if svc_le not in fw and b'62750001' not in fw and b'DIY-2_13C-' not in fw:
-        warn("no 6275 service / DIY-2_13C marker: elink webtool won't see this image after cutover")
+    if svc_le not in fw and b'62750001' not in fw:
+        warn("no 6275 service strings: elink webtool won't see this image after cutover")
     return True
 
 def main():

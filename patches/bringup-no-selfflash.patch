@@ -2,7 +2,7 @@ Bring-up gate: stop first boot from eating the vendor fallback.
 
 Unmodified HMCLOCK-EN, on any OTP-chain boot where slot 0 differs
 (magic/size/version), runs selflash_install() and overwrites slot 0 with
-the running image. On the DIY-2_13C tag slot 0 holds the vendor bank, so
+the running image. On this BWR tag slot 0 holds the vendor bank, so
 the first boot of a stock build destroys the only BLE-accessible fallback.
 
 This patch gates that call behind BRINGUP_NO_SELFFLASH. Apply to the

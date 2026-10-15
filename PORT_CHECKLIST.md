@@ -1,7 +1,7 @@
-# Port checklist: HMCLOCK-EN → 2.13" BWR tag (DIY-2_13C)
+# Port checklist: HMCLOCK-EN → 2.13" BWR tag (DCLK-xxxx)
 
 Source: `../HMCLOCK-EN` (terenceang fork of tpunix/HMCLOCK), paths below are
-relative to it. Vendor protocol = our RE of `DIY-2_13C` (`ble_ota.h` here).
+relative to it. Vendor protocol = our RE of the vendor 2.13" BWR firmware (`ble_ota.h` here).
 
 ## A. Boot/flash — MATCHES, reuse as-is
 
