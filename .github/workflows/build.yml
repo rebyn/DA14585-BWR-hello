@@ -18,8 +18,18 @@ jobs:
           cc -Wall -Wextra -I firmware/bwr_hello/src
           firmware/bwr_hello/src/epd_bwr.c firmware/bwr_hello/src/gfx.c
           firmware/bwr_hello/src/board.c firmware/bwr_hello/src/ble_ota.c
+          firmware/bwr_hello/src/clock_nav.c firmware/bwr_hello/src/demo.c
           firmware/bwr_hello/src/factory_reset.c
           host_test/stub_test.c -o /tmp/bwr_test && /tmp/bwr_test
+      - name: seed demo in sync + replay frames
+        run: |
+          python3 tools/mkdemo.py
+          git diff --exit-code -- host_test/seed_demo.json firmware/bwr_hello/src/demo_steps.h
+          cc -Wall -Wextra -I firmware/bwr_hello/src \
+            firmware/bwr_hello/src/epd_bwr.c firmware/bwr_hello/src/gfx.c \
+            firmware/bwr_hello/src/clock_nav.c firmware/bwr_hello/src/demo.c \
+            host_test/replay_demo.c -o /tmp/replay
+          cd host_test && /tmp/replay
       - name: check_bin self-test
         run: |
           python3 - <<'EOF'

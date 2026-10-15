@@ -14,6 +14,8 @@
 #include "board.h"
 #include "ble_ota.h"
 #include "factory_reset.h"
+#include "clock_nav.h"
+#include "demo.h"
 
 void epd_write_cmd(uint8_t c) { (void)c; }
 void epd_write_data(uint8_t v) { (void)v; }
@@ -42,7 +44,7 @@ int main(void) {
     assert(w > 0);   // rotation preserves ink (white=1 -> wire has set bits)
     epd_pack_wire(epd_red, wire);
     for (int i = 0; i < EPD_WIRE_PLANE_SIZE; i++) assert(wire[i] == 0xFF);
-    assert(gfx_glyph('H') && !gfx_glyph('Z'));
+    assert(gfx_glyph('H') && gfx_glyph('Z') && !gfx_glyph('{'));
     uint8_t h[64];
     ota_header(h, 1000, 0x12345678, 1);
     assert(h[0] == 0x70 && h[1] == 0x51 && h[2] == 0xAA && h[32] == 0);
@@ -87,5 +89,37 @@ int main(void) {
         for (uint32_t k = 0; k < banks[i].len; k++)
             assert(flash[banks[i].addr + k] == 0xA5);
     printf("C-OK factory-reset contract\n");
+
+    /* ---- clock/nav minimal port (esp32-c3-mini) ---- */
+    cnv_clock_t clk = {0};
+    cnv_weather_t wx = {0};
+    cnv_nav_t nav = {0};
+    assert(!cnv_parse(NULL, 0, &clk, &wx, &nav));
+    assert(!cnv_parse((uint8_t[]){0xA0, 1}, 2, &clk, &wx, &nav));  // OTA ignored
+    assert(cnv_parse((uint8_t[]){'T', 22, 31}, 3, &clk, &wx, &nav));
+    assert(clk.valid && clk.h == 22 && clk.m == 31);
+    assert(!cnv_parse((uint8_t[]){'T', 24, 0}, 3, &clk, &wx, &nav));
+    assert(cnv_parse((uint8_t[]){'W', 25, 2}, 3, &clk, &wx, &nav));
+    assert(wx.valid && wx.temp_c == 25 && wx.icon == 2);
+    uint8_t nbuf[] = {'N','8','4',' ','k','m',0,'R','e',' ','p','h','a','i',0};
+    assert(cnv_parse(nbuf, sizeof nbuf, &clk, &wx, &nav) && nav.active);
+    cnv_render(&clk, &wx, &nav);
+    int nb = 0, nr = 0;
+    for (int i = 0; i < EPD_PLANE_SIZE; i++) {
+        if (epd_black[i] != 0xFF) nb++;
+        if (epd_red[i] != 0xFF) nr++;
+    }
+    assert(nb > 0 && nr > 0);  // nav dist paints RED plane
+    assert(cnv_parse((uint8_t[]){'C'}, 1, &clk, &wx, &nav) && !nav.active);
+    assert(cnv_throttle(0, 0, true) && !cnv_throttle(1000, 0, false));
+    assert(cnv_throttle(5000, 0, false));
+    printf("C-OK clock-nav port\n");
+
+    /* ---- boot demo loop (same steps main.c replays) ---- */
+    assert(demo_count() > 0);
+    assert(!demo_apply(-1, &clk, &wx, &nav) && !demo_apply(demo_count(), &clk, &wx, &nav));
+    for (int s = 0; s < demo_count(); s++) assert(demo_apply(s, &clk, &wx, &nav));
+    assert(!nav.active);  // last seed step clears nav
+    printf("C-OK boot demo steps=%d\n", demo_count());
     return 0;
 }

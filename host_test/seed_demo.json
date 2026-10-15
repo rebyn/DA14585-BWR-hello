@@ -1,0 +1,54 @@
+[
+  {
+    "name": "idle_ready",
+    "desc": "morning, no nav",
+    "expect_red": false,
+    "writes": [
+      "54080f",
+      "571c00",
+      "43"
+    ]
+  },
+  {
+    "name": "highway",
+    "desc": "long instr tests 2-line wrap",
+    "expect_red": true,
+    "writes": [
+      "4e3834206b6d004469207468616e672076652068756f6e672063616f20746f6320484e2d485000"
+    ]
+  },
+  {
+    "name": "approach",
+    "desc": "ve-huong split case",
+    "expect_red": true,
+    "writes": [
+      "4e353030206d00526520706861692076652068756f6e6720566f205468692053617500"
+    ]
+  },
+  {
+    "name": "turn_now",
+    "desc": "red dist + short instr",
+    "expect_red": true,
+    "writes": [
+      "54082a",
+      "4e313530206d00526520706861692076616f20566f205468692053617500"
+    ]
+  },
+  {
+    "name": "arrive",
+    "desc": "zero dist",
+    "expect_red": true,
+    "writes": [
+      "4e30206d0044656e206e6f693a2031323320566f205468692053617500"
+    ]
+  },
+  {
+    "name": "done",
+    "desc": "clear + clock update",
+    "expect_red": false,
+    "writes": [
+      "43",
+      "540928"
+    ]
+  }
+]
