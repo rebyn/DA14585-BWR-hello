@@ -22,21 +22,38 @@ PW, PH = 104, 212          # portrait design canvas
 STRIDE = (CW + 7) // 8     # 27
 PAYLOAD = STRIDE * CH      # 2808
 
+FONT = "/System/Library/Fonts/SFNSMono.ttf"  # coding font, full Vietnamese
+
+
+def font(size):
+    f = ImageFont.truetype(FONT, size)
+    return f
+
+
+def check_coverage(f, strings):
+    missing = sorted({c for s in strings for c in s if c != " "
+                      and f.getmask(c).getbbox() is None})
+    assert not missing, f"missing glyphs: {missing}"
+
 portrait = Image.new("1", (PW, PH), 1)
 d = ImageDraw.Draw(portrait)
-f_title = ImageFont.load_default(size=18)
-f_task = ImageFont.load_default(size=11)
-f_foot = ImageFont.load_default(size=11)
+f_title = font(17)
+f_task = font(12)
+f_foot = font(10)
 
+TITLE = "CẦN LÀM"
 TASKS = [
-    ("Buy milk", True),
-    ("Call mom", True),
-    ("Write report", False),
+    ("Đi chợ", True),
+    ("Gọi mẹ", True),
+    ("Báo cáo", False),
     ("Gym 18:00", False),
-    ("Read book", False),
+    ("Đọc sách", False),
 ]
+check_coverage(f_title, [TITLE])
+check_coverage(f_task, [t for t, _ in TASKS])
+assert d.textlength(TITLE, font=f_title) <= PW - 16, TITLE
 
-d.text((8, 6), "TODO", font=f_title, fill=0)
+d.text((8, 6), TITLE, font=f_title, fill=0)
 d.line([(8, 28), (PW - 8, 28)], fill=0, width=1)
 
 y = 40
@@ -53,7 +70,7 @@ for text, done in TASKS:
     y += 30
 
 done_n = sum(1 for _, t in TASKS if t)
-d.text((8, PH - 16), f"{len(TASKS)} tasks - {done_n} done", font=f_foot, fill=0)
+d.text((8, PH - 16), f"{len(TASKS)} việc - {done_n} xong", font=f_foot, fill=0)
 portrait.save(os.path.join(HERE, "todo_vert_preview.png"))
 
 land = portrait.transpose(Image.ROTATE_90)
