@@ -1,34 +1,32 @@
-# Bring-up firmware: ancestor (HMCLOCK-EN) sources + SDK GCC startup + SDK GNU ld.
+# Bring-up firmware: vendored HMCLOCK-EN sources (ancestor/, plain files) +
+# SDK GCC startup + SDK GNU ld.
 # Usage:
-#   make -C firmware SDK_DIR=<sdkroot> ANC_DIR=<ancestor> BUILD=<outdir> [BRINGUP=1]
+#   make -C firmware SDK_DIR=<sdkroot> ANC_DIR=<ancestor> BUILD=<outdir>
 # Produces $(BUILD)/bwr_hello.bin (raw OTA payload) + .elf/.map, then validates
-# with tools/check_bin.py. The ancestor tree is NEVER modified: BRINGUP=1
-# (default) applies patches/*.patch to a private copy first.
+# with tools/check_bin.py. ancestor/ is a vendored snapshot of
+# terenceang/HMCLOCK-EN @ a424ca6 with our changes edited in directly
+# (DCLK naming kept, demo attract loop, active-slot version report, v54);
+# see PORT_CHECKLIST.md for provenance.
 THISDIR := $(dir $(lastword $(MAKEFILE_LIST)))
 BUILD ?= $(THISDIR)/../out
 SDK_DIR ?= $(HOME)/sdk
 ANC_DIR ?= $(THISDIR)/../ancestor
-BRINGUP ?= 1
+
 # NOTE: plain `CC ?=` loses to make's built-in default (cc); keep env override.
 CC := $(if $(filter default,$(origin CC)),arm-none-eabi-gcc,$(CC))
 OBJCOPY ?= arm-none-eabi-objcopy
 
 SRC_ANC := $(ANC_DIR)
-ifeq ($(BRINGUP),1)
-  SRC_ANC := $(BUILD)/ancestor-src
-  ANC_DEP := $(BUILD)/ancestor-src
-endif
 
 include $(BUILD)/sources.mk
 
 CFLAGS := -mcpu=cortex-m0 -mthumb -Os -std=gnu11 -ffunction-sections -fdata-sections \
   -flto -D__DA14585__ -Wall $(INCLUDES) $(FORCE_INC)
-ifeq ($(BRINGUP),1)
-  CFLAGS += -DBRINGUP_NO_SELFFLASH
-  # Demo attract loop (patches/demo-attract.patch): boot cycles nav frames.
-  # Production builds drop this (and the QR screen returns).
-  CFLAGS += -DDEMO_ATTRACT
-endif
+# Bring-up defines (drop both for production: selflash then persists slots,
+# and the pairing QR screen returns).
+# - BRINGUP_NO_SELFFLASH: first boot leaves the vendor fallback bank alone.
+# - DEMO_ATTRACT: boot cycles nav demo frames (see demo_draw).
+CFLAGS += -DBRINGUP_NO_SELFFLASH -DDEMO_ATTRACT
 ASFLAGS := -mcpu=cortex-m0 -mthumb -D__DA14585__ $(INCLUDES) -x assembler-with-cpp
 # NOTE: no $(FORCE_INC) here — those are C headers; feeding struct/enum
 # declarations to the assembler is exactly the user_config.h "junk at end
@@ -39,9 +37,8 @@ LDCPP := -D__DA14585__ \
   -I$(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/common_project_files
 # NOTE: no heap/retention -D overrides here. The ancestor pins 8-connection
 # heap sizes explicitly (ENV_HEAP_SZ etc. in da14585_config_advanced.h), so a
-# -D would lose to the header redefine. The 1-connection trim lives in
-# patches/bringup-1conn-heaps.patch, applied to the build copy that this
-# -I points at — one source of truth for both the C build and the ldscript.
+# -D would lose to the header redefine. The 1-connection trim is edited into
+# ancestor/src/config/da14585_config_advanced.h directly.
 LDFLAGS := -mcpu=cortex-m0 -mthumb -Os -flto \
   -specs=nano.specs -specs=nosys.specs \
   -T $(BUILD)/ldscript.ld -L $(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/common_project_files/misc \
@@ -63,17 +60,9 @@ OBJS := $(foreach s,$(SOURCES),$(BUILD)/obj/$(subst /,_,$(s)).o)
 
 all: $(BUILD)/bwr_hello.bin
 
-$(BUILD)/sources.mk: $(THISDIR)/../tools/gen_sources.py $(ANC_DEP)
+$(BUILD)/sources.mk: $(THISDIR)/../tools/gen_sources.py
 	@mkdir -p $(BUILD)
 	python3 $< --sdk $(SDK_DIR) --ancestor $(SRC_ANC) --out $@
-
-$(BUILD)/ancestor-src: $(THISDIR)/../patches/bringup-no-selfflash.patch $(THISDIR)/../patches/bringup-1conn-heaps.patch $(THISDIR)/../patches/demo-attract.patch $(THISDIR)/../patches/version-report-active.patch $(THISDIR)/../patches/version-bump-54.patch
-	@mkdir -p $(BUILD) && rm -rf $@ && cp -r $(ANC_DIR) $@ && rm -rf $@/.git
-	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-no-selfflash.patch
-	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-1conn-heaps.patch
-	patch -p1 --directory=$@ < $(THISDIR)/../patches/demo-attract.patch
-	patch -p1 --directory=$@ < $(THISDIR)/../patches/version-report-active.patch
-	patch -p1 --directory=$@ < $(THISDIR)/../patches/version-bump-54.patch && touch $@
 
 $(BUILD)/ldscript.ld:
 	@mkdir -p $(BUILD)

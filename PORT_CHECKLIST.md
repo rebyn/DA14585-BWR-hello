@@ -1,7 +1,11 @@
 # Port checklist: HMCLOCK-EN → 2.13" BWR tag (DCLK-xxxx)
 
-Source: `../HMCLOCK-EN` (terenceang fork of tpunix/HMCLOCK), paths below are
-relative to it. Vendor protocol = our RE of the vendor 2.13" BWR firmware (`ble_ota.h` here).
+Source: `ancestor/` — vendored snapshot of terenceang/HMCLOCK-EN
+(fork of tpunix/HMCLOCK) @ `a424ca6`, edited in place. Our changes vs
+upstream: stock `DCLK-` naming kept, demo attract loop (`demo_draw`,
+minute-tick advance, `-DDEMO_ATTRACT`), `FF04` reports the running slot's
+version, 1-connection heap trim, `EPD_VERSION` v54. Paths below are
+relative to `ancestor/`. Vendor protocol = our RE of the vendor 2.13" BWR firmware (`ble_ota.h` here).
 
 ## A. Boot/flash — MATCHES, reuse as-is
 
@@ -84,4 +88,5 @@ relative to it. Vendor protocol = our RE of the vendor 2.13" BWR firmware (`ble_
 ## License note
 
 Fork changes MIT (Terence Ang); original HMCLOCK states no license — credit
-tpunix, don't relicense their files. Our files stay separate (`firmware/`).
+tpunix, don't relicense their files. Our additions live directly in the
+vendored `ancestor/` tree (see provenance above) plus our own `firmware/`.

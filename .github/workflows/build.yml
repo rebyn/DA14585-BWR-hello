@@ -57,16 +57,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - name: install ARM toolchain
         run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc-arm-none-eabi python3
       - name: unpack vendored SDK
         run: |
           mkdir -p ~/sdk && unzip -q ancestor/docs/SDK_6.0.22.1401.zip -d ~/sdk
           ls ~/sdk/DA145xx_SDK/6.0.22.1401/sdk | head -n 3
-      - name: apply bring-up patches
-        run: for p in patches/*.patch; do patch -p1 --directory=ancestor < "$p"; done
       - name: compile-only sweep (87 files)
         run: python3 tools/ci_compile.py --sdk ~/sdk --ancestor ancestor
 
@@ -75,8 +71,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - name: install ARM toolchain
         run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc-arm-none-eabi python3
       - name: unpack vendored SDK
