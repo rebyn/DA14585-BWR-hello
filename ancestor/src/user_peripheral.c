@@ -319,8 +319,10 @@ static void app_clock_timer_cb(void)
     // On a fast-update tick, refresh the ADC reading; stop further work if the battery is low
 	if(stat>=2){
 		adc1_update();
-		// ADC voltage below 2.6V
-        if(adcval<1360){
+		// ADC raw below 1621 (~2.85 V: volt(mV) = (adcval*225)>>7).
+		// Trips while the cell still has headroom above the brownout floor;
+		// the old 1360 (~2.39 V) only fired once sag was already fatal.
+        if(adcval<1621){
 					// Draw the low-battery icon
             LB_draw();
 					// Cancel the timer so it stops waking the device
