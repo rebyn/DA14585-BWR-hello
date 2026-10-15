@@ -1117,20 +1117,18 @@ void user_svc1_rest_att_info_req_handler(ke_msg_id_t const msgid,
 /****************************************************************************************/
 // Demo attract loop (bring-up builds only).
 //
-// Boot paints frame 0 immediately and each minute tick advances one frame:
-// 6 nav frames (same content as host_test/seed_demo.json, ASCII only: the
-// panel fonts have no Vietnamese glyphs) plus a 7th on-panel diagnostics
-// frame (running build, slot headers, product slot map), so the panel
-// re-renders step by step with no phone attached. The header clock is live
-// (hour/minute globals).
+// Boot paints frame 0 once; the webtool Test button (bare 0x98) steps
+// through the 6 nav frames (same content as host_test/seed_demo.json, ASCII
+// only: the panel fonts have no Vietnamese glyphs) plus a 7th on-panel
+// diagnostics frame (running build, slot headers, product slot map). There
+// is no automatic advance -- the minute tick keeps time but never paints.
+// The header clock is live (hour/minute globals).
 //
-// Rules: the loop starts on every boot (even with a stored image); after that
-// an OTA in progress or uploaded-image mode win (no paint, no advance).
-// 0x93 mode 1 shows the stored image (pausing the demo), 0x93 mode 0 resumes
-// it. The first time sync hands the screen back to the clock face (the
-// minute tick owns the screen once synced). Demo builds sacrifice the
-// pairing QR screen (web-picker pairing still works); production builds
-// drop -DDEMO_ATTRACT.
+// Rules: frame 0 paints once at boot (even with a stored image; it stays
+// in flash and 0x93 mode 1 still shows it); afterwards only manual Test
+// presses paint. The first time sync hands the screen to the clock face.
+// Demo builds sacrifice the pairing QR screen (web-picker pairing still
+// works); production builds drop -DDEMO_ATTRACT.
 // B/W only: the red plane is phase 2 (see PORT_CHECKLIST.md phase D).
 /****************************************************************************************/
 

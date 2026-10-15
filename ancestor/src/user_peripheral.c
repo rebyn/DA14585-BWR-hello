@@ -50,9 +50,6 @@
 
 int app_connection_idx                          __SECTION_ZERO("retention_mem_area0"); // Connection index, saved in the retention memory area
 timer_hnd app_clock_timer_used                  __SECTION_ZERO("retention_mem_area0"); // Clock timer handle, saved in retention memory
-#ifdef DEMO_ATTRACT
-static int demo_step; // next demo frame to paint
-#endif
 timer_hnd app_param_update_request_timer_used   __SECTION_ZERO("retention_mem_area0"); // Parameter-update-request timer handle, saved in retention memory
 
 int adv_state = 0;                          // Advertising state: 0 = not advertising, 1 = advertising
@@ -188,10 +185,6 @@ void user_app_init(void)
 	printk("\n\nuser_app_init! %s %08x\n", __TIME__, epd_version[2]);
     app_param_update_request_timer_used = EASY_TIMER_INVALID_TIMER;  // Initialize the parameter-update timer
 	app_clock_timer_used = EASY_TIMER_INVALID_TIMER;                 // Initialize the clock timer
-#ifdef DEMO_ATTRACT
-	demo_step = 0;
-#endif
-
 	clock_interval = 60; // Set the clock update interval to 60 seconds
 	clock_fixup_value = 0; // Initialize the clock drift correction value
 	clock_fixup_count = 0; // Initialize the clock drift correction counter
@@ -315,13 +308,9 @@ static void app_clock_timer_cb(void)
     // and the Bluetooth icon on this screen follows the advertising state.
     if(cal_minute<0){
 #ifdef DEMO_ATTRACT
-        // Demo build: advance exactly one frame per minute tick. The busy
-        // guard inside demo_draw() turns a colliding tick into a harmless
-        // no-op, and the step moves only on completed paints.
-        // (Pairing QR sacrificed in demo builds; web-picker pairing unaffected.)
-        if(stat>=1 && display_mode!=1 && !ota_state)
-            if(demo_draw(demo_step % demo_nframes()))
-                demo_step++;
+        // Demo builds: no automatic repaint -- the panel keeps whatever is
+        // showing (boot frame or manual Test steps). Timekeeping, ADC and
+        // advertising below continue untouched.
 #else
         if(stat>=1){
             // Full refresh on the hour (stat>=3) to clear any ghosting from the
@@ -428,13 +417,12 @@ void user_app_on_db_init_complete( void )
 	// pairing screen (the clock is not synced after a reset)
 	display_mode = img_mode_get();
 #ifdef DEMO_ATTRACT
-	// Demo build: the attract loop starts on every boot, even with a stored
-	// uploaded image (this tag has one). The image stays in flash: 0x93 mode 1
-	// shows it (pausing the demo); 0x93 mode 0 hands the screen back to the
-	// demo while unsynced, clock face once synced.
+	// Demo build: frame 0 paints once at boot; afterwards only manual
+	// Test presses step frames (no automatic advance). A stored uploaded
+	// image stays in flash: 0x93 mode 1 shows it; anything else leaves the
+	// current frame on screen.
 	display_mode = 0;
 	demo_draw(0);
-	demo_step = 1;
 #else
 	if(display_mode!=1 || image_draw(0)!=0){
 		display_mode = 0;
