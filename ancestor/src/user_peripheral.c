@@ -307,18 +307,12 @@ static void app_clock_timer_cb(void)
     // Redraw every minute here: an unpaired tag needs to stay visibly alive,
     // and the Bluetooth icon on this screen follows the advertising state.
     if(cal_minute<0){
-#ifdef DEMO_ATTRACT
-        // Demo builds: no automatic repaint -- the panel keeps whatever is
-        // showing (boot frame or manual Test steps). Timekeeping, ADC and
-        // advertising below continue untouched.
-#else
         if(stat>=1){
             // Full refresh on the hour (stat>=3) to clear any ghosting from the
             // repeated fast updates; fast update otherwise.
             if(display_mode!=1)
                 QR_draw(stat>=3 ? UPDATE_FULL : UPDATE_FAST);
         }
-#endif
         return;
     }
 
@@ -417,10 +411,10 @@ void user_app_on_db_init_complete( void )
 	// pairing screen (the clock is not synced after a reset)
 	display_mode = img_mode_get();
 #ifdef DEMO_ATTRACT
-	// Demo build: frame 0 paints once at boot; afterwards only manual
-	// Test presses step frames (no automatic advance). A stored uploaded
-	// image stays in flash: 0x93 mode 1 shows it; anything else leaves the
-	// current frame on screen.
+	// Demo build: frame 0 paints once at boot. The minute tick is fully
+	// stock (QR while unsynced, clock face once synced), so a Test-stepped
+	// demo frame is replaced by the clock UI at the next minute boundary
+	// on its own -- no restore timer needed.
 	display_mode = 0;
 	demo_draw(0);
 #else

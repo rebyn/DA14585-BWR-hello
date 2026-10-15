@@ -1115,20 +1115,23 @@ void user_svc1_rest_att_info_req_handler(ke_msg_id_t const msgid,
 
 #ifdef DEMO_ATTRACT
 /****************************************************************************************/
-// Demo attract loop (bring-up builds only).
+// Demo frames on demand (bring-up builds only).
 //
 // Boot paints frame 0 once; the webtool Test button (bare 0x98) steps
 // through the 6 nav frames (same content as host_test/seed_demo.json, ASCII
 // only: the panel fonts have no Vietnamese glyphs) plus a 7th on-panel
 // diagnostics frame (running build, slot headers, product slot map). There
-// is no automatic advance -- the minute tick keeps time but never paints.
-// The header clock is live (hour/minute globals).
+// is no automatic demo advance: the minute tick is fully stock (QR while
+// unsynced, clock face once synced), so a stepped frame gives way to the
+// clock UI at the next minute boundary by itself. The header clock is live
+// (hour/minute globals).
 //
 // Rules: frame 0 paints once at boot (even with a stored image; it stays
 // in flash and 0x93 mode 1 still shows it); afterwards only manual Test
-// presses paint. The first time sync hands the screen to the clock face.
-// Demo builds sacrifice the pairing QR screen (web-picker pairing still
-// works); production builds drop -DDEMO_ATTRACT.
+// presses paint, and the next minute tick restores the clock UI on its own
+// (QR while unsynced, clock face once synced -- the tick is untouched
+// stock; sync also paints immediately via the 0x91 handler). Demo builds
+// sacrifice nothing else; production builds drop -DDEMO_ATTRACT.
 // B/W only: the red plane is phase 2 (see PORT_CHECKLIST.md phase D).
 /****************************************************************************************/
 
