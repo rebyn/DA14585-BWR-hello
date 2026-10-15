@@ -1,7 +1,7 @@
 diff -ruN --exclude=.git ancestor/src/user_custs1_impl.c /tmp/anc-mod/src/user_custs1_impl.c
 --- ancestor/src/user_custs1_impl.c	2026-10-15 20:42:53
-+++ /tmp/anc-mod/src/user_custs1_impl.c	2026-10-15 20:44:53
-@@ -1104,3 +1104,88 @@
++++ /tmp/anc-mod/src/user_custs1_impl.c	2026-10-15 21:08:44
+@@ -1104,3 +1104,93 @@
  
      KE_MSG_SEND(rsp);
  }
@@ -53,7 +53,10 @@ diff -ruN --exclude=.git ancestor/src/user_custs1_impl.c /tmp/anc-mod/src/user_c
 +
 +int demo_nframes(void) { return 6; }
 +
-+void demo_draw(int step)
++// Returns 1 if painted, 0 if skipped (OTA in progress or panel still busy
++// with the previous update -- the next tick retries, so a stuck BUSY stalls
++// the demo instead of re-initing the controller mid-frame and wedging it).
++int demo_draw(int step)
 +{
 +	LAYOUT *lt = &layouts[current_layout];
 +	int xres = lt->xres, yres = lt->yres;
@@ -63,7 +66,8 @@ diff -ruN --exclude=.git ancestor/src/user_custs1_impl.c /tmp/anc-mod/src/user_c
 +	step %= demo_nframes();
 +	if(step < 0) step += demo_nframes();
 +
-+	if(ota_state) return;
++	if(ota_state) return 0;
++	if(epd_busy()) return 0;
 +
 +	sprintf(head, "%02d:%02d", hour, minute);
 +	sprintf(tag, "NAV %d/6", step+1);
@@ -88,25 +92,26 @@ diff -ruN --exclude=.git ancestor/src/user_custs1_impl.c /tmp/anc-mod/src/user_c
 +	epd_hw_open();
 +	epd_update_mode(UPDATE_FULL);
 +	epd_commit();
++	return 1;
 +}
 +#endif
 diff -ruN --exclude=.git ancestor/src/user_custs1_impl.h /tmp/anc-mod/src/user_custs1_impl.h
 --- ancestor/src/user_custs1_impl.h	2026-10-15 20:42:53
-+++ /tmp/anc-mod/src/user_custs1_impl.h	2026-10-15 20:44:13
++++ /tmp/anc-mod/src/user_custs1_impl.h	2026-10-15 21:08:44
 @@ -88,6 +88,10 @@
  void QR_draw(int mode);
  void TEST_draw(void);
  void LB_draw(void);
 +// Demo attract loop (bring-up builds, -DDEMO_ATTRACT): cycles nav frames.
 +#define DEMO_TICK_S 12
-+void demo_draw(int step);
++int demo_draw(int step); // 1 painted, 0 skipped (busy/OTA)
 +int demo_nframes(void);
  
  /**
   ****************************************************************************************
 diff -ruN --exclude=.git ancestor/src/user_peripheral.c /tmp/anc-mod/src/user_peripheral.c
 --- ancestor/src/user_peripheral.c	2026-10-15 20:42:53
-+++ /tmp/anc-mod/src/user_peripheral.c	2026-10-15 20:44:24
++++ /tmp/anc-mod/src/user_peripheral.c	2026-10-15 21:08:44
 @@ -50,6 +50,10 @@
  
  int app_connection_idx                          __SECTION_ZERO("retention_mem_area0"); // Connection index, saved in the retention memory area
@@ -129,7 +134,7 @@ diff -ruN --exclude=.git ancestor/src/user_peripheral.c /tmp/anc-mod/src/user_pe
  
  	clock_interval = 60; // Set the clock update interval to 60 seconds
  	clock_fixup_value = 0; // Initialize the clock drift correction value
-@@ -308,12 +316,20 @@
+@@ -308,12 +316,23 @@
      // Redraw every minute here: an unpaired tag needs to stay visibly alive,
      // and the Bluetooth icon on this screen follows the advertising state.
      if(cal_minute<0){
@@ -137,8 +142,11 @@ diff -ruN --exclude=.git ancestor/src/user_peripheral.c /tmp/anc-mod/src/user_pe
 +        // Demo build: minute tick repaints the current demo frame with a full
 +        // update (clears ghosting); the 12 s timer advances frames in between.
 +        // (Pairing QR sacrificed in demo builds; web-picker pairing unaffected.)
++        // Repaint the currently shown frame (no advance: the 12 s timer owns
++        // the advance); the busy guard inside demo_draw() makes a colliding
++        // tick a harmless no-op instead of a mid-frame re-init.
 +        if(stat>=1 && display_mode!=1 && !ota_state)
-+            demo_draw(demo_step % demo_nframes());
++            demo_draw((demo_step+demo_nframes()-1)%demo_nframes());
 +#else
          if(stat>=1){
              // Full refresh on the hour (stat>=3) to clear any ghosting from the
@@ -150,7 +158,7 @@ diff -ruN --exclude=.git ancestor/src/user_peripheral.c /tmp/anc-mod/src/user_pe
          return;
      }
  
-@@ -362,6 +378,24 @@
+@@ -362,6 +381,24 @@
   *        timer to fire exactly on that boundary
   ****************************************************************************************
   */
@@ -165,8 +173,8 @@ diff -ruN --exclude=.git ancestor/src/user_peripheral.c /tmp/anc-mod/src/user_pe
 +			app_easy_timer_cancel(demo_timer_used);
 +			return;
 +		}
-+		demo_draw(demo_step % demo_nframes());
-+		demo_step++;
++		if(demo_draw(demo_step % demo_nframes()))
++			demo_step++;
 +	}
 +	demo_timer_used = app_easy_timer(DEMO_TICK_S*100, demo_timer_cb);
 +}
@@ -175,7 +183,7 @@ diff -ruN --exclude=.git ancestor/src/user_peripheral.c /tmp/anc-mod/src/user_pe
  void app_clock_timer_restart(void)
  {
  	app_easy_timer_cancel(app_clock_timer_used); // Cancel the current timer
-@@ -410,10 +444,21 @@
+@@ -410,10 +447,21 @@
  	// Restore the persisted mode: the uploaded image if one is stored, else the
  	// pairing screen (the clock is not synced after a reset)
  	display_mode = img_mode_get();
