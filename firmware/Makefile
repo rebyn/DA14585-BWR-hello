@@ -28,14 +28,26 @@ ASFLAGS := -mcpu=cortex-m0 -mthumb -D__DA14585__ $(INCLUDES) -x assembler-with-c
 # declarations to the assembler is exactly the user_config.h "junk at end
 # of line" failure. Keil assembles without its C MiscControls for the same
 # reason.
-LDCPP := -D__DA14585__ -I$(SRC_ANC)/src/config \
+LDCPP := -D__DA14585__ -DCFG_MAX_CONNECTIONS=1 -DCFG_RET_DATA_SIZE=512 \
+  -I$(SRC_ANC)/src/config \
   -I$(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/common_project_files
-LDFLAGS := -mcpu=cortex-m0 -mthumb -specs=nano.specs \
+# -DCFG_MAX_CONNECTIONS=1 : the ldscript's generic da1458x_config_* headers do
+# not define this, so without the -D the per-chip da14585_config_basic.h value
+# (1) can be shadowed and BLE retained heaps balloon to the CFG_CON=8 default.
+# Force 1 to match the C build (single-connection clock).
+# -DCFG_RET_DATA_SIZE=512 : same shadowing for the retention data area (C build
+# leaves 2048 from its config; the linker only sees 512 here). Retained RAM is
+# carved out of the top of the code region, so every byte reclaimed grows LR_IROM3.
+LDFLAGS := -mcpu=cortex-m0 -mthumb -Os \
+  -specs=nano.specs -specs=nosys.specs \
   -T $(BUILD)/ldscript.ld -L $(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/common_project_files/misc \
   -L $(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/platform/system_library/output/Keil_5 \
-  -Wl,--gc-sections -Wl,-Map=$(BUILD)/bwr_hello.map -Wl,--print-memory-usage
-# NOTE: nano, not full newlib: full libc overflows LR_IROM3 by ~47KB. Our
-# syscalls.c + the SDK's arch_main.c stubs satisfy nano's references.
+  -Wl,--gc-sections -Wl,--no-wchar-size-warning \
+  -Wl,-Map=$(BUILD)/bwr_hello.map -Wl,--print-memory-usage
+# NOTE: nano + nosys (not full newlib): full libc overflows LR_IROM3 by ~47KB.
+# -f[do]function/data-sections on the objects + --gc-sections here is what lets
+# nano pull in only the libc it references. Keil da14585_586.lib supplies the
+# ROM-patch shims (PATCHED_*, patch_data1, arch_asm_*) that have no GCC sources.
 # NOTE: no -nostartfiles: newlib crt0 supplies _start (called by the SDK GCC
 # Reset_Handler) and main() lives in arch_main.c. The Keil ARMCC archive
 # da14585_586.lib provides PATCHED_*, patch_data1, arch_asm_* (ROM-patch
