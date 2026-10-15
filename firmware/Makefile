@@ -67,12 +67,13 @@ $(BUILD)/sources.mk: $(THISDIR)/../tools/gen_sources.py $(ANC_DEP)
 	@mkdir -p $(BUILD)
 	python3 $< --sdk $(SDK_DIR) --ancestor $(SRC_ANC) --out $@
 
-$(BUILD)/ancestor-src: $(THISDIR)/../patches/bringup-no-selfflash.patch $(THISDIR)/../patches/bringup-1conn-heaps.patch $(THISDIR)/../patches/demo-attract.patch $(THISDIR)/../patches/version-report-active.patch
+$(BUILD)/ancestor-src: $(THISDIR)/../patches/bringup-no-selfflash.patch $(THISDIR)/../patches/bringup-1conn-heaps.patch $(THISDIR)/../patches/demo-attract.patch $(THISDIR)/../patches/version-report-active.patch $(THISDIR)/../patches/version-bump-54.patch
 	@mkdir -p $(BUILD) && rm -rf $@ && cp -r $(ANC_DIR) $@ && rm -rf $@/.git
 	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-no-selfflash.patch
 	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-1conn-heaps.patch
 	patch -p1 --directory=$@ < $(THISDIR)/../patches/demo-attract.patch
-	patch -p1 --directory=$@ < $(THISDIR)/../patches/version-report-active.patch && touch $@
+	patch -p1 --directory=$@ < $(THISDIR)/../patches/version-report-active.patch
+	patch -p1 --directory=$@ < $(THISDIR)/../patches/version-bump-54.patch && touch $@
 
 $(BUILD)/ldscript.ld:
 	@mkdir -p $(BUILD)
