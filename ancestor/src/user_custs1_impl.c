@@ -1040,8 +1040,16 @@ void user_svc1_long_val_wr_ind_handler(ke_msg_id_t const msgid,
 		// Panel size override; the chip restarts if it changed
 		if(len>=2 && !ota_state) panel_size_set(param->value[1]);
 	}else if(param->value[0]==0x98){
-		// Display test screen; the next clock redraw or a mode switch replaces it
-		if(!ota_state) TEST_draw();
+		// Demo builds: the webtool's Test button (bare 0x98, unchanged)
+		// steps the demo frames instead of the display test; the next clock
+		// redraw or a mode switch still replaces it.
+		if(!ota_state){
+#ifdef DEMO_ATTRACT
+			demo_preview();
+#else
+			TEST_draw();
+#endif
+		}
 	}else if(param->value[0]>=0x93 && param->value[0]<=0x96){
 		// Display mode / image upload
 		image_cmd((const uint8_t*)param->value, len);
@@ -1193,5 +1201,15 @@ int demo_draw(int step)
 	epd_update_mode(UPDATE_FULL);
 	epd_commit();
 	return 1;
+}
+
+// Manual demo stepping (BLE command 0x98 page 2): each write advances one
+// nav frame, independent of the minute-tick attract loop. A press landing
+// mid-update is a no-op (busy guard) rather than a re-init.
+void demo_preview(void)
+{
+	static int mstep = 0;
+	if(demo_draw(mstep % demo_nframes()))
+		mstep++;
 }
 #endif

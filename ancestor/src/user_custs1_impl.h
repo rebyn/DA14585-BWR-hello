@@ -92,6 +92,7 @@ void LB_draw(void);
 // minute tick (the panel proven cadence). Step advances only on completed
 // paints; a busy panel turns the tick into a harmless no-op.
 int demo_draw(int step); // 1 painted, 0 skipped (busy/OTA)
+void demo_preview(void); // bare 0x98 steps demo frames (demo builds)
 int demo_nframes(void);
 
 /**
