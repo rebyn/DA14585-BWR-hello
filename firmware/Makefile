@@ -22,23 +22,24 @@ endif
 include $(BUILD)/sources.mk
 
 CFLAGS := -mcpu=cortex-m0 -mthumb -Os -std=gnu11 -ffunction-sections -fdata-sections \
-  -D__DA14585__ -Wall $(INCLUDES) $(FORCE_INC)
+  -flto -D__DA14585__ -Wall $(INCLUDES) $(FORCE_INC)
+ifeq ($(BRINGUP),1)
+  CFLAGS += -DBRINGUP_NO_SELFFLASH
+endif
 ASFLAGS := -mcpu=cortex-m0 -mthumb -D__DA14585__ $(INCLUDES) -x assembler-with-cpp
 # NOTE: no $(FORCE_INC) here — those are C headers; feeding struct/enum
 # declarations to the assembler is exactly the user_config.h "junk at end
 # of line" failure. Keil assembles without its C MiscControls for the same
 # reason.
-LDCPP := -D__DA14585__ -DCFG_MAX_CONNECTIONS=1 -DCFG_RET_DATA_SIZE=512 \
+LDCPP := -D__DA14585__ \
   -I$(SRC_ANC)/src/config \
   -I$(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/common_project_files
-# -DCFG_MAX_CONNECTIONS=1 : the ldscript's generic da1458x_config_* headers do
-# not define this, so without the -D the per-chip da14585_config_basic.h value
-# (1) can be shadowed and BLE retained heaps balloon to the CFG_CON=8 default.
-# Force 1 to match the C build (single-connection clock).
-# -DCFG_RET_DATA_SIZE=512 : same shadowing for the retention data area (C build
-# leaves 2048 from its config; the linker only sees 512 here). Retained RAM is
-# carved out of the top of the code region, so every byte reclaimed grows LR_IROM3.
-LDFLAGS := -mcpu=cortex-m0 -mthumb -Os \
+# NOTE: no heap/retention -D overrides here. The ancestor pins 8-connection
+# heap sizes explicitly (ENV_HEAP_SZ etc. in da14585_config_advanced.h), so a
+# -D would lose to the header redefine. The 1-connection trim lives in
+# patches/bringup-1conn-heaps.patch, applied to the build copy that this
+# -I points at — one source of truth for both the C build and the ldscript.
+LDFLAGS := -mcpu=cortex-m0 -mthumb -Os -flto \
   -specs=nano.specs -specs=nosys.specs \
   -T $(BUILD)/ldscript.ld -L $(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/common_project_files/misc \
   -L $(SDK_DIR)/DA145xx_SDK/6.0.22.1401/sdk/platform/system_library/output/Keil_5 \
@@ -63,9 +64,10 @@ $(BUILD)/sources.mk: $(THISDIR)/../tools/gen_sources.py $(ANC_DEP)
 	@mkdir -p $(BUILD)
 	python3 $< --sdk $(SDK_DIR) --ancestor $(SRC_ANC) --out $@
 
-$(BUILD)/ancestor-src: $(THISDIR)/../patches/bringup-no-selfflash.patch
+$(BUILD)/ancestor-src: $(THISDIR)/../patches/bringup-no-selfflash.patch $(THISDIR)/../patches/bringup-1conn-heaps.patch
 	@mkdir -p $(BUILD) && rm -rf $@ && cp -r $(ANC_DIR) $@ && rm -rf $@/.git
-	patch -p1 --directory=$@ < $< && touch $@
+	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-no-selfflash.patch
+	patch -p1 --directory=$@ < $(THISDIR)/../patches/bringup-1conn-heaps.patch && touch $@
 
 $(BUILD)/ldscript.ld:
 	@mkdir -p $(BUILD)
