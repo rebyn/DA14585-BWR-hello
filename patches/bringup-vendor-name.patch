@@ -1,18 +1,18 @@
-Advertise as DIY-2_13C-XXYYZZ instead of DCLK-XXYYZZ.
+Fixed BLE name DIY-2_13-6429 (no letter): the old-HM 2_13 family speaks our protocol.
 
-The vendor webtool's 2.13C picker scans with namePrefix 'DIY-2_13C-' and
-routes by prefix to the 2_13c family, which explicitly supports the old
-HMCLOCK/FF00 protocol this firmware implements (js/family_hm.js, all traffic
-over 0xFF01 Long Value). A DCLK- name matches neither the picker filter nor
-any routing rule, so the device is invisible to the webtool after the first
-flash.
+Three device lines share the 2.13" size but speak different BLE services:
+  DIY-2_13-xxxx  old v1.10, HMCLOCK lineage, 16-bit 0xFF00 (family_hm)
+  DIY-2_13N-xxxx new-gen B/W, 128-bit 6275 vendor service (2_13n family)
+  DIY-2_13C-xxxx color, 128-bit 6275 vendor service (2_13c family)
+This firmware implements FF00/FF01 only, so only the no-letter name routes
+to a webtool family that can talk to it. N or C would connect the picker
+to a family demanding the 6275 service we do not expose.
 
-Keeping the vendor name means every booting image stays reachable: forward
-updates and restore (vendor .bin back) both go through the same webtool over
-the same FF00 channel. Applied to the build copy only.
-
-Caveat: a non-booting image is still unrecoverable without SWD. The name only
-rescues images that boot far enough to advertise.
+Suffix 6429 is hardcoded, not OTP-derived: HMCLOCK's OTP transform may
+produce a different suffix than the vendor firmware on this tag. Fixed name
+keeps picker filter + family routing stable across every future image.
+Single-tag assumption: two tags with this build would advertise identically.
+Applied to the build copy only.
 
 --- a/src/user_peripheral.c
 +++ b/src/user_peripheral.c
@@ -21,20 +21,24 @@ rescues images that boot far enough to advertise.
  static int otp_boot;                           // Boot-related data read from OTP
  static char adv_name[20];                      // Advertised name buffer
 -char *bt_id = adv_name+7;                      // Start of the Bluetooth ID within the advertised name (right after "DCLK-")
-+char *bt_id = adv_name+11;                     // Start of the Bluetooth ID within the advertised name (right after "DIY-2_13C-")
++char *bt_id = adv_name+11;                     // Start of the Bluetooth ID within the advertised name (right after "DIY-2_13-")
  int clock_interval;                            // Clock update interval (seconds)
  int clock_fixup_value;                         // Clock drift correction value
  int clock_fixup_count;                         // Clock drift correction counter
-@@ -151,10 +151,10 @@
+@@ -151,10 +151,12 @@
  	ba0 &= 0x00ffffff;
  	ba0 ^= ba1;
  
 -	// Build the advertised name (format: DCLK-XXYYZZ, where XXYYZZ are the last
-+	// Build the advertised name (format: DIY-2_13C-XXYYZZ, where XXYYZZ are the last
- 	// three bytes of the Bluetooth address)
- 	u8 *ba = (u8*)&ba0;
+-	// three bytes of the Bluetooth address)
+-	u8 *ba = (u8*)&ba0;
 -	sprintf(adv_name+2, "DCLK-%02x%02x%02x", ba[2], ba[1], ba[0]);
-+	sprintf(adv_name+2, "DIY-2_13C-%02x%02x%02x", ba[2], ba[1], ba[0]);
++	// Fixed advertised name: byte-identical to the vendor firmware on this tag.
++	// (HMCLOCK derives the suffix from OTP with its own transform; the vendor
++	// suffix 6429 may differ. A fixed name keeps picker filter + family routing
++	// stable across every future image.)
++	memcpy(adv_name+2, "DIY-2_13-6429", 13);
++	(void)ba0; (void)ba1;
  	int name_len = strlen(adv_name+2);
  
  	// If the device name hasn't been set, use the generated name
@@ -45,7 +49,7 @@ rescues images that boot far enough to advertise.
  		draw_bt(xres-17, qcy-43);
  	}
 -	sprintf(tbuf, "DCLK-%s", bt_id);
-+	sprintf(tbuf, "DIY-2_13C-%s", bt_id);
++	sprintf(tbuf, "DIY-2_13-%s", bt_id);
  	draw_text_centered(col_cx, qcy-28, tbuf, BLACK);
  
  	// Solid divider on the optical center: midpoint of the neighboring text bands
