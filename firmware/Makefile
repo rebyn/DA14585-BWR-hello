@@ -77,9 +77,11 @@ $(BUILD)/ldscript.ld:
 define COMPILE_rule
 $(BUILD)/obj/$(subst /,_,$(1)).o: $(1) | $(BUILD)/sources.mk
 	@mkdir -p $$(@D)
-	$(if $(filter %.S,$(1)),$(CC) $(ASFLAGS),$(CC) $(CFLAGS)) -c $$< -o $$@
+	$(if $(filter %.S,$(1)),$(CC) $(ASFLAGS),$(CC) $(CFLAGS) $(if $(findstring syscalls.c,$(1)),-fno-lto)) -c $$< -o $$@
 endef
 $(foreach s,$(SOURCES),$(eval $(call COMPILE_rule,$(s))))
+# NOTE: syscalls.c gets -fno-lto above. With -flto its stubs become LTO IR and
+# --gc-sections discards them before libc references them (_fstat/_isatty).
 
 $(BUILD)/bwr_hello.elf: $(OBJS) $(BUILD)/ldscript.ld
 	$(CC) $(LDFLAGS) $(OBJS) $(LIBS) -o $@
